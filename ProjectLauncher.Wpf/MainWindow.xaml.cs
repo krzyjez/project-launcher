@@ -113,12 +113,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         File.WriteAllText(SettingsFilePath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
-    // Rozciaga okno na cala uzyteczna wysokosc ekranu, zeby przewijanie listy zaczynalo sie jak najpozniej.
+    // Okno rosnie pod liczbe projektow (SizeToContent), ale nie wyzej niz uzyteczna wysokosc ekranu;
+    // dopiero po osiagnieciu tego limitu wlacza sie przewijanie listy.
     private void _ApplyWindowHeightLimit()
     {
-        var availableHeight = Math.Max(MinHeight, SystemParameters.WorkArea.Height - WindowScreenMargin);
-        Height = availableHeight;
-        MaxHeight = availableHeight;
+        MaxHeight = Math.Max(MinHeight, SystemParameters.WorkArea.Height - WindowScreenMargin);
     }
 
     // Odswieza bindowania ustawien widoku glownego.

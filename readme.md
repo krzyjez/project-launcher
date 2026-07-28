@@ -90,7 +90,7 @@ Alt + Spacja -> Projekty -> Enter
 ## Zachowanie
 
 1. Okno pokazuje kompaktowa liste projektow: numer, nazwe projektu oraz licznik uruchomien i date ostatniego uruchomienia.
-2. Okno zajmuje cala uzyteczna wysokosc ekranu, wiec lista aktywnych projektow przewija sie dopiero wtedy, gdy karty nie mieszcza sie na monitorze.
+2. Wysokosc okna dopasowuje sie do liczby projektow, ale nie przekracza uzytecznej wysokosci ekranu; lista aktywnych projektow przewija sie dopiero wtedy, gdy karty nie mieszcza sie na monitorze.
 3. Przelacznik `Details` pokazuje lub ukrywa sciezke, opis i preferowane imiona agentow dla projektu.
 4. Kolor projektu jest widoczny jako akcent karty i pozostaje zapisany w `launch-projects.json`.
 5. Klikniecie dowolnego miejsca na karcie projektu uruchamia Visual Studio Code z odpowiednim folderem w osobnym oknie.
