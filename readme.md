@@ -97,7 +97,7 @@ Alt + Spacja -> Projekty -> Enter
 6. Klawisze `1`-`9` uruchamiaja projekt o odpowiadajacym numerze na liscie.
 7. Po udanym kliknieciu albo uzyciu numeru `lastLaunched` i `launchCount` w `launch-projects.json` sa aktualizowane automatycznie.
 8. Menu kontekstowe karty pozwala edytowac nazwe, kolor, opis i imiona agentow.
-9. Rzadziej uzywany projekt mozna odstawic. Odstawione projekty pozostaja widoczne na dole okna mala czcionka i mozna je przywrocic do aktywnych.
+9. Rzadziej uzywany projekt mozna odstawic. Odstawione projekty pozostaja widoczne na dole okna mala czcionka i mozna je przywrocic do aktywnych. Wiersz odstawionego projektu pokazuje nazwe i pierwsza linie opisu; sciezka pozostaje w dymku karty.
 10. Przyciski sortowania w naglowku wybieraja kolejnosc po `launchCount`, dacie `lastLaunched` albo alfabetycznie po nazwie; domyslny tryb to data ostatniego uruchomienia.
 11. Odstawiony projekt mozna przywrocic albo usunac calkowicie z rejestru.
 12. Panel tagow po prawej stronie filtruje aktywne i odstawione projekty; przy kilku zaznaczonych tagach wystarczy dopasowanie dowolnego z nich.

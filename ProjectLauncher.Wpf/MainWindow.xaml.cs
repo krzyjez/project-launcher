@@ -955,6 +955,7 @@ public sealed class ProjectItem : INotifyPropertyChanged
             if (SetField(ref _description, value))
             {
                 OnPropertyChanged(nameof(DescriptionVisibility));
+                OnPropertyChanged(nameof(DescriptionFirstLine));
             }
         }
     }
@@ -1046,6 +1047,13 @@ public sealed class ProjectItem : INotifyPropertyChanged
     public string LaunchInfo => string.IsNullOrWhiteSpace(LastLaunchedDate)
         ? $"{LaunchCount} ur."
         : $"{LaunchCount} ur. - {LastLaunchedDate}";
+
+    // Pierwsza niepusta linia opisu; uzywana w kompaktowej sekcji projektow odstawionych.
+    [JsonIgnore]
+    public string DescriptionFirstLine => Description
+        .Split('\n')
+        .Select(line => line.Trim())
+        .FirstOrDefault(line => line.Length > 0) ?? "";
 
     [JsonIgnore]
     public Visibility DescriptionVisibility => string.IsNullOrWhiteSpace(Description)
