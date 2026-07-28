@@ -17,8 +17,7 @@ namespace ProjectLauncher.Wpf;
 
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
-    private const double PreferredWindowHeight = 720;
-    private const double WindowScreenMargin = 48;
+    private const double WindowScreenMargin = 16;
 
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -114,11 +113,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         File.WriteAllText(SettingsFilePath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
-    // Utrzymuje okno w granicach ekranu, a nadmiar projektow oddaje do przewijanej listy.
+    // Rozciaga okno na cala uzyteczna wysokosc ekranu, zeby przewijanie listy zaczynalo sie jak najpozniej.
     private void _ApplyWindowHeightLimit()
     {
         var availableHeight = Math.Max(MinHeight, SystemParameters.WorkArea.Height - WindowScreenMargin);
-        Height = Math.Min(PreferredWindowHeight, availableHeight);
+        Height = availableHeight;
         MaxHeight = availableHeight;
     }
 
