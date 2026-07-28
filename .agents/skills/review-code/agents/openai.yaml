@@ -1,0 +1,7 @@
+interface:
+  display_name: "review-code"
+  short_description: "Wykonaj krytyczny przegląd kodu lub zmian."
+  default_prompt: "Use $review-code to Wykonaj krytyczny przegląd kodu lub zmian."
+
+policy:
+  allow_implicit_invocation: false

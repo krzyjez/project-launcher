@@ -1,0 +1,8 @@
+# agent-signal-settings 2 2026-07-28
+[features]
+codex_hooks = true
+
+[hooks]
+SessionStart = [{ hooks = [{ type = "command", command = "agent-signal hook", timeout = 10 }] }]
+UserPromptSubmit = [{ hooks = [{ type = "command", command = "agent-signal hook", timeout = 10 }] }]
+Stop = [{ hooks = [{ type = "command", command = "agent-signal hook", timeout = 10 }] }]

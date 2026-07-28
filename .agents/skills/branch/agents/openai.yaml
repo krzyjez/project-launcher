@@ -1,0 +1,7 @@
+interface:
+  display_name: "branch"
+  short_description: "Pomagaj rozpocząć lub zakończyć workflow brancha w tym repozytorium."
+  default_prompt: "Use $branch to Pomagaj rozpocząć lub zakończyć workflow brancha w tym repozytorium."
+
+policy:
+  allow_implicit_invocation: true

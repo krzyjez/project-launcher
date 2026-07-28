@@ -1,0 +1,7 @@
+interface:
+  display_name: "inc-version"
+  short_description: "Zwiększ numer wersji projektu i aktualizuj `version.md`."
+  default_prompt: "Use $inc-version to Zwiększ numer wersji projektu i aktualizuj `version.md`."
+
+policy:
+  allow_implicit_invocation: false

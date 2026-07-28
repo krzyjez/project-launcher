@@ -1,0 +1,7 @@
+interface:
+  display_name: "memory"
+  short_description: "Aktualizuj plik `project-memory.md` w katalogu głównym projektu."
+  default_prompt: "Use $memory to Aktualizuj plik `project-memory.md` w katalogu głównym projektu."
+
+policy:
+  allow_implicit_invocation: true

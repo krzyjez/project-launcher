@@ -1,0 +1,7 @@
+interface:
+  display_name: "doc"
+  short_description: "Twórz i aktualizuj trwałą dokumentację projektu."
+  default_prompt: "Use $doc to Twórz i aktualizuj trwałą dokumentację projektu."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,3 +1,9 @@
-ProjectLauncher.Wpf/bin/
-ProjectLauncher.Wpf/obj/
+bin/
+obj/
 dist/
+
+.vs/
+*.user
+*.suo
+
+.claude/settings.local.json
