@@ -1,0 +1,642 @@
+<Window x:Class="ProjectLauncher.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Projekty"
+        Width="930"
+        Height="720"
+        MinWidth="800"
+        MinHeight="360"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Background="#090A0F"
+        Foreground="#F7F2E8"
+        Loaded="Window_Loaded"
+        KeyDown="Window_KeyDown">
+    <Window.Resources>
+        <SolidColorBrush x:Key="CardBackground" Color="#15161B" />
+        <SolidColorBrush x:Key="CardHoverBackground" Color="#1E2028" />
+        <SolidColorBrush x:Key="TextMuted" Color="#85858F" />
+        <SolidColorBrush x:Key="TextSubtle" Color="#C9C1AB" />
+        <SolidColorBrush x:Key="Accent" Color="#FF6B1A" />
+
+        <Style x:Key="ScrollBarPageButtonStyle" TargetType="{x:Type RepeatButton}">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type RepeatButton}">
+                        <Border Background="Transparent" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="LauncherScrollThumbStyle" TargetType="{x:Type Thumb}">
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Thumb}">
+                        <Border x:Name="ThumbBorder"
+                                Background="#4A4E5A"
+                                CornerRadius="5"
+                                Margin="3,2" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ThumbBorder" Property="Background" Value="#626879" />
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="ThumbBorder" Property="Background" Value="{StaticResource Accent}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ThumbBorder" Property="Opacity" Value="0" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="{x:Type ScrollBar}">
+            <Setter Property="Width" Value="15" />
+            <Setter Property="MinWidth" Value="15" />
+            <Setter Property="Background" Value="#0F1016" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollBar}">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="#262933"
+                                BorderThickness="1,0,0,0">
+                            <Track x:Name="PART_Track"
+                                   IsDirectionReversed="True"
+                                   Margin="1">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}"
+                                                  Style="{StaticResource ScrollBarPageButtonStyle}" />
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource LauncherScrollThumbStyle}" />
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}"
+                                                  Style="{StaticResource ScrollBarPageButtonStyle}" />
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="HeaderButtonStyle" TargetType="{x:Type Button}">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#D8D2C8" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#24262D" />
+                                <Setter Property="Foreground" Value="#FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="HeaderToggleButtonStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="MinWidth" Value="74" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#D8D2C8" />
+            <Setter Property="BorderBrush" Value="#383A43" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#24262D" />
+                                <Setter Property="Foreground" Value="#FFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Background" Value="#24262D" />
+                                <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+                                <Setter Property="Foreground" Value="#FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="NeonOutlineButtonStyle" TargetType="{x:Type Button}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#F7F2E8" />
+            <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#1E2028" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ProjectCardContainerStyle" TargetType="{x:Type ListBoxItem}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                        <ContentPresenter />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ProjectCardStyle" TargetType="{x:Type Border}">
+            <Setter Property="Background" Value="{StaticResource CardBackground}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Padding" Value="14,12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource CardHoverBackground}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="ProjectDescriptionToolTipStyle" TargetType="{x:Type ToolTip}">
+            <Setter Property="Background" Value="#15161B" />
+            <Setter Property="Foreground" Value="{StaticResource TextSubtle}" />
+            <Setter Property="BorderBrush" Value="#383A43" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="MaxWidth" Value="360" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+
+        <Style x:Key="TagFilterButtonStyle" TargetType="{x:Type Button}">
+            <Setter Property="Background" Value="#15161B" />
+            <Setter Property="Foreground" Value="{StaticResource TextSubtle}" />
+            <Setter Property="BorderBrush" Value="#383A43" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="9,6" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border x:Name="TagButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="7"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TagButtonBorder" Property="Background" Value="#24262D" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter Property="Background" Value="#24262D" />
+                                <Setter Property="Foreground" Value="#FFFFFF" />
+                                <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel Margin="18">
+        <Grid DockPanel.Dock="Top" Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel>
+                <TextBlock Text="Projekty"
+                           FontSize="26"
+                           FontWeight="Bold" />
+                <StackPanel Orientation="Horizontal" Margin="1,3,0,0">
+                    <TextBlock Text="wspolny rejestr repozytoriow"
+                               Foreground="{StaticResource TextMuted}"
+                               FontSize="11" />
+                    <TextBlock Text="{Binding LauncherVersion, StringFormat=v{0}}"
+                               Foreground="{StaticResource TextMuted}"
+                               FontSize="11"
+                               Margin="8,0,0,0" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <ToggleButton x:Name="DetailsToggleButton"
+                              Content="Details"
+                              Click="_DetailsToggleButton_Click"
+                              IsChecked="{Binding ShowDetails, Mode=TwoWay}"
+                              ToolTip="Pokaz szczegoly projektu"
+                              Style="{StaticResource HeaderToggleButtonStyle}"
+                              Margin="0,0,8,0" />
+
+                <Button x:Name="AddProjectButton"
+                        Content="+"
+                        Click="AddProjectButton_Click"
+                        ToolTip="Dodaj projekt"
+                        Style="{StaticResource HeaderButtonStyle}"
+                        Margin="0,0,8,0" />
+
+                <ToggleButton x:Name="SortByLaunchCountButton"
+                              Content="Uruchomienia"
+                              Tag="LaunchCount"
+                              Click="SortModeButton_Click"
+                              ToolTip="Sortuj po liczbie uruchomien"
+                              Style="{StaticResource HeaderToggleButtonStyle}"
+                              Margin="0,0,6,0" />
+
+                <ToggleButton x:Name="SortByLastLaunchedButton"
+                              Content="Ostatnio"
+                              Tag="LastLaunched"
+                              Click="SortModeButton_Click"
+                              ToolTip="Sortuj po dacie ostatniego uruchomienia"
+                              Style="{StaticResource HeaderToggleButtonStyle}"
+                              Margin="0,0,6,0" />
+
+                <ToggleButton x:Name="SortByNameButton"
+                              Content="A–Z"
+                              Tag="Name"
+                              Click="SortModeButton_Click"
+                              ToolTip="Sortuj alfabetycznie"
+                              Style="{StaticResource HeaderToggleButtonStyle}"
+                              Margin="0,0,8,0" />
+
+                <Button x:Name="CloseButton"
+                        Content="×"
+                        Click="CloseButton_Click"
+                        ToolTip="Zamknij"
+                        Style="{StaticResource HeaderButtonStyle}" />
+            </StackPanel>
+        </Grid>
+
+        <Border x:Name="TagsPanel"
+                DockPanel.Dock="Right"
+                Width="155"
+                Margin="14,0,0,0"
+                Padding="10"
+                Background="#101116"
+                BorderBrush="#30313A"
+                BorderThickness="1"
+                CornerRadius="9">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top"
+                           Text="Tagi"
+                           Foreground="{StaticResource TextMuted}"
+                           FontSize="11"
+                           FontWeight="SemiBold"
+                           Margin="1,0,0,8" />
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <TextBlock Text="Brak tagow — dodaj je w edycji projektu."
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="{x:Type TextBlock}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding TagFilters.Count}" Value="0">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <ItemsControl ItemsSource="{Binding TagFilters}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Content="{Binding Name}"
+                                            Click="TagFilterButton_Click"
+                                            Style="{StaticResource TagFilterButtonStyle}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+
+        <StackPanel x:Name="ShelvedProjectsPanel"
+                    DockPanel.Dock="Bottom"
+                    Margin="0,6,0,0">
+            <TextBlock Text="Odstawione"
+                       Foreground="{StaticResource TextMuted}"
+                       FontSize="11"
+                       FontWeight="SemiBold"
+                       Margin="1,0,0,6" />
+
+            <Border Background="#101116"
+                    BorderBrush="#30313A"
+                    BorderThickness="1"
+                    CornerRadius="9"
+                    Padding="8,5">
+                <ListBox x:Name="ShelvedProjectsList"
+                         ItemsSource="{Binding ShelvedProjects}"
+                         MaxHeight="120"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="{x:Type ListBoxItem}">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0" />
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
+                            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                                        <ContentPresenter />
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Cursor="Hand"
+                                   ToolTipService.InitialShowDelay="250"
+                                   ToolTipService.ShowDuration="60000"
+                                   MouseLeftButtonUp="ProjectCard_MouseLeftButtonUp"
+                                   Margin="0,1"
+                                   MinHeight="18">
+                                <Grid.ToolTip>
+                                    <ToolTip DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
+                                             Style="{StaticResource ProjectDescriptionToolTipStyle}">
+                                        <StackPanel>
+                                            <TextBlock Text="Katalog"
+                                                       Foreground="{StaticResource TextMuted}"
+                                                       FontSize="10"
+                                                       FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Path}"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,2,0,8" />
+
+                                            <TextBlock Text="Opis"
+                                                       Visibility="{Binding DescriptionVisibility}"
+                                                       Foreground="{StaticResource TextMuted}"
+                                                       FontSize="10"
+                                                       FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Description}"
+                                                       Visibility="{Binding DescriptionVisibility}"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,2,0,8" />
+
+                                            <TextBlock Text="{Binding AgentNamesText}"
+                                                       Foreground="{Binding ProjectBrush}"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </ToolTip>
+                                </Grid.ToolTip>
+                                <Grid.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Aktywuj" Click="RestoreProjectMenuItem_Click" />
+                                        <MenuItem Header="Edytuj projekt" Click="EditDescriptionMenuItem_Click" />
+                                        <MenuItem Header="Usun" Click="DeleteProjectMenuItem_Click" />
+                                    </ContextMenu>
+                                </Grid.ContextMenu>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{Binding ProjectBrush}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Path}"
+                                               FontSize="10"
+                                               Foreground="{StaticResource TextMuted}"
+                                               Margin="10,2,0,0"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding LaunchInfo}"
+                                           FontSize="10"
+                                           Foreground="{StaticResource TextMuted}"
+                                           TextAlignment="Right"
+                                           Margin="12,2,0,0" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+        </StackPanel>
+
+        <ListBox x:Name="ProjectsList"
+                 ItemsSource="{Binding ActiveProjects}"
+                 ItemContainerStyle="{StaticResource ProjectCardContainerStyle}"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 PreviewMouseLeftButtonDown="ProjectsList_PreviewMouseLeftButtonDown"
+                 MouseMove="ProjectsList_MouseMove"
+                 Drop="ProjectsList_Drop"
+                 AllowDrop="True">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Border Style="{StaticResource ProjectCardStyle}"
+                            BorderBrush="{Binding ProjectBrush}"
+                            ToolTipService.InitialShowDelay="250"
+                            ToolTipService.ShowDuration="60000"
+                            MouseLeftButtonUp="ProjectCard_MouseLeftButtonUp">
+                        <Border.ToolTip>
+                            <ToolTip DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
+                                     Style="{StaticResource ProjectDescriptionToolTipStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="Katalog"
+                                               Foreground="{StaticResource TextMuted}"
+                                               FontSize="10"
+                                               FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding Path}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,2,0,8" />
+
+                                    <TextBlock Text="Opis"
+                                               Visibility="{Binding DescriptionVisibility}"
+                                               Foreground="{StaticResource TextMuted}"
+                                               FontSize="10"
+                                               FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding Description}"
+                                               Visibility="{Binding DescriptionVisibility}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,2,0,8" />
+
+                                    <TextBlock Text="{Binding AgentNamesText}"
+                                               Foreground="{Binding ProjectBrush}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </ToolTip>
+                        </Border.ToolTip>
+
+                        <Border.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Edytuj projekt" Click="EditDescriptionMenuItem_Click" />
+                                <MenuItem Header="Odstaw" Click="ShelveProjectMenuItem_Click" />
+                            </ContextMenu>
+                        </Border.ContextMenu>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="34" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="145" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Width="4"
+                                    Height="28"
+                                    CornerRadius="3"
+                                    Background="{Binding ProjectBrush}"
+                                    VerticalAlignment="Top"
+                                    Margin="0,3,0,0" />
+
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding Number}"
+                                       Foreground="{Binding ProjectBrush}"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Top" />
+
+                            <Grid Grid.Column="2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Text="{Binding Name}"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           Foreground="#FFFFFF"
+                                           TextTrimming="CharacterEllipsis" />
+
+                                <TextBlock Grid.Row="1"
+                                           Text="{Binding Path}"
+                                           Visibility="{Binding DataContext.ProjectDetailsVisibility, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                           FontSize="11"
+                                           Foreground="{StaticResource TextMuted}"
+                                           Margin="0,5,12,0"
+                                           TextTrimming="CharacterEllipsis" />
+
+                                 <TextBlock Grid.Row="2"
+                                            Text="{Binding Description}"
+                                            Foreground="{StaticResource TextSubtle}"
+                                            FontSize="13"
+                                            TextWrapping="NoWrap"
+                                            TextTrimming="CharacterEllipsis"
+                                            Margin="0,5,12,0">
+                                     <TextBlock.Style>
+                                         <Style TargetType="{x:Type TextBlock}">
+                                             <Setter Property="Visibility" Value="Visible" />
+                                             <Style.Triggers>
+                                                 <DataTrigger Binding="{Binding DescriptionVisibility}" Value="Collapsed">
+                                                     <Setter Property="Visibility" Value="Collapsed" />
+                                                 </DataTrigger>
+                                                 <DataTrigger Binding="{Binding DataContext.ShowDetails, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
+                                                     <Setter Property="TextWrapping" Value="Wrap" />
+                                                     <Setter Property="TextTrimming" Value="None" />
+                                                     <Setter Property="Margin" Value="0,8,12,0" />
+                                                 </DataTrigger>
+                                             </Style.Triggers>
+                                         </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <TextBlock Grid.Row="3"
+                                           Text="{Binding AgentNamesText}"
+                                           Visibility="{Binding DataContext.ProjectDetailsVisibility, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                           Foreground="{Binding ProjectBrush}"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"
+                                           Margin="0,8,12,0" />
+                            </Grid>
+
+                            <TextBlock Grid.Column="3"
+                                       Text="{Binding LaunchInfo}"
+                                       Foreground="{StaticResource TextMuted}"
+                                       FontSize="11"
+                                       TextAlignment="Right"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Top" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+</Window>
