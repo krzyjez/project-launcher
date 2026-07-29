@@ -19,6 +19,7 @@
 ## Operational Conventions
 
 - Aplikacja jest uruchamiana przez skrót `Projekty.lnk`, wskazujący na `dist\ProjectLauncher.Wpf.exe`.
+- `PublishDir` w `ProjectLauncher.Wpf.csproj` kieruje `dotnet publish` do `dist`, więc publikacja zawsze trafia tam, gdzie celuje skrót; przed publikacją trzeba zamknąć działający launcher, bo blokuje pliki w `dist`.
 - Do testów globalnego rejestru można użyć zmiennej `AI_TOOLS_HOME`.
 
 ## Pitfalls

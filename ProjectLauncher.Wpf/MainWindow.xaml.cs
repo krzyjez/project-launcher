@@ -3,13 +3,16 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using Microsoft.Win32;
 
@@ -17,8 +20,7 @@ namespace ProjectLauncher.Wpf;
 
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
-    private const double PreferredWindowHeight = 720;
-    private const double WindowScreenMargin = 48;
+    private const double WindowScreenMargin = 16;
 
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -62,6 +64,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         InitializeComponent();
         _ApplyWindowHeightLimit();
+        SourceInitialized += (_, _) => _ApplyWindowHeightLimit();
+        LocationChanged += (_, _) => _ApplyWindowHeightLimit();
+        DpiChanged += (_, _) => _ApplyWindowHeightLimit();
         DataContext = this;
         LoadSettings();
         LoadProjects();
@@ -114,12 +119,35 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         File.WriteAllText(SettingsFilePath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
-    // Utrzymuje okno w granicach ekranu, a nadmiar projektow oddaje do przewijanej listy.
+    // Okno rosnie pod liczbe projektow (SizeToContent), ale nie wyzej niz uzyteczna wysokosc ekranu;
+    // dopiero po osiagnieciu tego limitu wlacza sie przewijanie listy.
+    // Limit jest przeliczany takze po przeniesieniu okna, bo monitory moga miec rozne rozdzielczosci.
     private void _ApplyWindowHeightLimit()
     {
-        var availableHeight = Math.Max(MinHeight, SystemParameters.WorkArea.Height - WindowScreenMargin);
-        Height = Math.Min(PreferredWindowHeight, availableHeight);
-        MaxHeight = availableHeight;
+        var limit = Math.Max(MinHeight, _GetCurrentScreenWorkAreaHeight() - WindowScreenMargin);
+
+        // Bez tego progu zmiana MaxHeight w trakcie przeciagania moglaby sie zapetlac z LocationChanged.
+        if (Math.Abs(MaxHeight - limit) < 1)
+            return;
+
+        MaxHeight = limit;
+    }
+
+    // Wysokosc obszaru roboczego monitora, na ktorym stoi okno, w jednostkach WPF.
+    private double _GetCurrentScreenWorkAreaHeight()
+    {
+        var windowHandle = new WindowInteropHelper(this).Handle;
+        if (windowHandle == IntPtr.Zero)
+            return SystemParameters.WorkArea.Height;
+
+        var monitorInfo = new NativeMonitorInfo { Size = Marshal.SizeOf<NativeMonitorInfo>() };
+        if (!GetMonitorInfoW(MonitorFromWindow(windowHandle, MonitorDefaultToNearest), ref monitorInfo))
+            return SystemParameters.WorkArea.Height;
+
+        var workAreaPixels = monitorInfo.WorkArea.Bottom - monitorInfo.WorkArea.Top;
+        var scale = VisualTreeHelper.GetDpi(this).DpiScaleY;
+
+        return scale > 0 ? workAreaPixels / scale : workAreaPixels;
     }
 
     // Odswieza bindowania ustawien widoku glownego.
@@ -483,6 +511,34 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return null;
     }
 
+    // Okno nie ma belki tytulu, wiec przenoszenie startuje z dowolnego pustego miejsca w oknie.
+    private void _Window_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ButtonState != MouseButtonState.Pressed)
+            return;
+
+        if (_IsInteractiveElement(e.OriginalSource as DependencyObject))
+            return;
+
+        DragMove();
+    }
+
+    // Kontrolki i karty projektow obsluguja klikniecie po swojemu, wiec nie moga przenosic okna.
+    private static bool _IsInteractiveElement(DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (source is ButtonBase or ListBoxItem or ScrollBar or Thumb)
+                return true;
+
+            source = source is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(source)
+                : LogicalTreeHelper.GetParent(source);
+        }
+
+        return false;
+    }
+
     private void ProjectCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (FindProjectItem(sender) is { } project)
@@ -732,6 +788,33 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         return null;
     }
+
+    private const uint MonitorDefaultToNearest = 2;
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr windowHandle, uint flags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfoW(IntPtr monitorHandle, ref NativeMonitorInfo monitorInfo);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeMonitorInfo
+    {
+        public int Size;
+        public NativeRect Monitor;
+        public NativeRect WorkArea;
+        public uint Flags;
+    }
 }
 
 public static class ProjectLauncherPaths
@@ -955,6 +1038,7 @@ public sealed class ProjectItem : INotifyPropertyChanged
             if (SetField(ref _description, value))
             {
                 OnPropertyChanged(nameof(DescriptionVisibility));
+                OnPropertyChanged(nameof(DescriptionFirstLine));
             }
         }
     }
@@ -1046,6 +1130,13 @@ public sealed class ProjectItem : INotifyPropertyChanged
     public string LaunchInfo => string.IsNullOrWhiteSpace(LastLaunchedDate)
         ? $"{LaunchCount} ur."
         : $"{LaunchCount} ur. - {LastLaunchedDate}";
+
+    // Pierwsza niepusta linia opisu; uzywana w kompaktowej sekcji projektow odstawionych.
+    [JsonIgnore]
+    public string DescriptionFirstLine => Description
+        .Split('\n')
+        .Select(line => line.Trim())
+        .FirstOrDefault(line => line.Length > 0) ?? "";
 
     [JsonIgnore]
     public Visibility DescriptionVisibility => string.IsNullOrWhiteSpace(Description)

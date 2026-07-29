@@ -90,17 +90,18 @@ Alt + Spacja -> Projekty -> Enter
 ## Zachowanie
 
 1. Okno pokazuje kompaktowa liste projektow: numer, nazwe projektu oraz licznik uruchomien i date ostatniego uruchomienia.
-2. Lista aktywnych projektow przewija sie pionowo, zamiast powiekszac okno pod wszystkie karty.
+2. Wysokosc okna dopasowuje sie do liczby projektow, ale nie przekracza uzytecznej wysokosci ekranu; lista aktywnych projektow przewija sie dopiero wtedy, gdy karty nie mieszcza sie na monitorze. Limit jest liczony dla monitora, na ktorym stoi okno, i przelicza sie automatycznie po przeniesieniu okna na inny monitor.
 3. Przelacznik `Details` pokazuje lub ukrywa sciezke, opis i preferowane imiona agentow dla projektu.
 4. Kolor projektu jest widoczny jako akcent karty i pozostaje zapisany w `launch-projects.json`.
 5. Klikniecie dowolnego miejsca na karcie projektu uruchamia Visual Studio Code z odpowiednim folderem w osobnym oknie.
 6. Klawisze `1`-`9` uruchamiaja projekt o odpowiadajacym numerze na liscie.
 7. Po udanym kliknieciu albo uzyciu numeru `lastLaunched` i `launchCount` w `launch-projects.json` sa aktualizowane automatycznie.
 8. Menu kontekstowe karty pozwala edytowac nazwe, kolor, opis i imiona agentow.
-9. Rzadziej uzywany projekt mozna odstawic. Odstawione projekty pozostaja widoczne na dole okna mala czcionka i mozna je przywrocic do aktywnych.
+9. Rzadziej uzywany projekt mozna odstawic. Odstawione projekty pozostaja widoczne na dole okna mala czcionka i mozna je przywrocic do aktywnych. Wiersz odstawionego projektu pokazuje nazwe i pierwsza linie opisu; sciezka pozostaje w dymku karty.
 10. Przyciski sortowania w naglowku wybieraja kolejnosc po `launchCount`, dacie `lastLaunched` albo alfabetycznie po nazwie; domyslny tryb to data ostatniego uruchomienia.
 11. Odstawiony projekt mozna przywrocic albo usunac calkowicie z rejestru.
 12. Panel tagow po prawej stronie filtruje aktywne i odstawione projekty; przy kilku zaznaczonych tagach wystarczy dopasowanie dowolnego z nich.
 13. Wybrane tagi sa filtrem tymczasowym i nie sa zapisywane po zamknieciu launchera.
 14. W widoku skroconym karta projektu pokazuje jedna linie opisu; widok `Details` rozwija pelny opis wraz ze sciezka i imionami agentow.
 15. Numer wersji aplikacji jest widoczny pod naglowkiem `Projekty`.
+16. Okno nie ma belki tytulu, ale mozna je przeciagac chwytajac dowolne puste miejsce: naglowek, marginesy, tlo listy albo tlo panelu tagow. Przyciski, suwaki i karty projektow nie przenosza okna.
