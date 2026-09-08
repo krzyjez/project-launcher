@@ -4,9 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Text.Encodings.Web;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -21,12 +18,6 @@ namespace ProjectLauncher.Wpf;
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private const double WindowScreenMargin = 16;
-
-    private readonly JsonSerializerOptions _jsonOptions = new()
-    {
-        WriteIndented = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-    };
 
     private readonly ObservableCollection<ProjectItem> _projects = [];
     private Point _dragStartPoint;
@@ -76,47 +67,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ReadScreenshotArgument();
     }
 
-    private string ProjectsFilePath => ProjectLauncherPaths.GetProjectsFilePath();
-
-    private string SettingsFilePath => ProjectLauncherPaths.GetSettingsFilePath();
-
     private void LoadSettings()
     {
-        if (!File.Exists(SettingsFilePath))
-        {
-            return;
-        }
-
-        try
-        {
-            var json = File.ReadAllText(SettingsFilePath, Encoding.UTF8);
-            var settings = JsonSerializer.Deserialize<ProjectLauncherSettings>(json, _jsonOptions);
-            _sortMode = settings?.SortMode is ProjectSortMode.LaunchCount or ProjectSortMode.Name
-                ? settings.SortMode
-                : ProjectSortMode.LastLaunched;
-            ShowDetails = settings?.ShowDetails ?? false;
-        }
-        catch (JsonException)
-        {
-            _sortMode = ProjectSortMode.LastLaunched;
-            ShowDetails = false;
-        }
-        catch (IOException)
-        {
-            _sortMode = ProjectSortMode.LastLaunched;
-            ShowDetails = false;
-        }
+        var settings = ProjectRegistry.LoadSettings();
+        _sortMode = settings.SortMode;
+        ShowDetails = settings.ShowDetails;
     }
 
     private void SaveSettings()
     {
-        var settings = new ProjectLauncherSettings
+        ProjectRegistry.SaveSettings(new ProjectLauncherSettings
         {
             SortMode = _sortMode,
             ShowDetails = ShowDetails
-        };
-        var json = JsonSerializer.Serialize(settings, _jsonOptions);
-        File.WriteAllText(SettingsFilePath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        });
     }
 
     // Okno rosnie pod liczbe projektow (SizeToContent), ale nie wyzej niz uzyteczna wysokosc ekranu;
@@ -171,40 +135,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void LoadProjects()
     {
-        var json = File.ReadAllText(ProjectsFilePath, Encoding.UTF8);
-        var projects = JsonSerializer.Deserialize<List<ProjectItem>>(json, _jsonOptions) ?? [];
         _projects.Clear();
-
-        for (var index = 0; index < projects.Count; index++)
+        foreach (var project in ProjectRegistry.LoadProjects())
         {
-            var project = projects[index];
-            if (project.Order <= 0)
-            {
-                project.Order = index + 1;
-            }
-
-            if (string.IsNullOrWhiteSpace(project.Color))
-            {
-                project.Color = ProjectItem.DefaultColors[index % ProjectItem.DefaultColors.Length];
-            }
-
-            if (project.LegacyHidden == true)
-            {
-                project.Shelved = true;
-                project.LegacyHidden = null;
-            }
-
             _projects.Add(project);
         }
-
-        NormalizeProjectOrder();
     }
 
     private void SaveProjects()
     {
-        NormalizeProjectOrder();
-        var json = JsonSerializer.Serialize(_projects, _jsonOptions);
-        File.WriteAllText(ProjectsFilePath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        ProjectRegistry.SaveProjects(_projects);
     }
 
     private void RebuildProjectLists()
@@ -278,15 +218,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void NormalizeProjectOrder()
     {
-        var order = 1;
-        var orderedProjects = _projects.OrderBy(project => project.Order).ToList();
-        _projects.Clear();
-
-        foreach (var project in orderedProjects)
-        {
-            project.Order = order++;
-            _projects.Add(project);
-        }
+        ProjectRegistry.NormalizeOrder(_projects);
     }
 
     private void OpenProject(ProjectItem project)
@@ -761,20 +693,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private IEnumerable<ProjectItem> OrderedProjects()
     {
-        return _sortMode switch
-        {
-            ProjectSortMode.LaunchCount => _projects
-                .OrderByDescending(project => project.LaunchCount)
-                .ThenByDescending(project => project.LastLaunched)
-                .ThenBy(project => project.Order),
-            ProjectSortMode.Name => _projects
-                .OrderBy(project => project.Name, StringComparer.CurrentCultureIgnoreCase)
-                .ThenBy(project => project.Order),
-            _ => _projects
-                .OrderByDescending(project => project.LastLaunched)
-                .ThenByDescending(project => project.LaunchCount)
-                .ThenBy(project => project.Order)
-        };
+        return ProjectRegistry.Ordered(_projects, _sortMode);
     }
 
     private static ProjectItem? FindProjectItem(object sender)
