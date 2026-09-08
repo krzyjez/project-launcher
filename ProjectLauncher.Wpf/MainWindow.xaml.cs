@@ -333,9 +333,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         var projectPath = Path.GetFullPath(dialog.FolderName);
-        if (_projects.Any(project => SameProjectPath(project.Path, projectPath)))
+        var existingProject = _projects.FirstOrDefault(project => SameProjectPath(project.Path, projectPath));
+        if (existingProject is not null)
         {
-            MessageBox.Show(this, $"Ten katalog jest juz w rejestrze:\n{projectPath}", "Projekty", MessageBoxButton.OK, MessageBoxImage.Information);
+            // Odstawiony projekt nie jest widoczny w glownej liscie, wiec bez tej podpowiedzi
+            // komunikat wyglada jak blad rejestru.
+            var shelvedHint = existingProject.Shelved ? "\n\nProjekt jest wsrod odstawionych." : "";
+            MessageBox.Show(this, $"Ten katalog jest juz w rejestrze:\n{projectPath}{shelvedHint}", "Projekty", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -624,6 +628,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         project.Shelved = true;
         RebuildProjectLists();
         SaveProjects();
+        _ScrollShelvedProjectIntoView(project);
+    }
+
+    // Pokazuje odstawiony projekt w dolnej sekcji; bez tego swiezo odstawiony projekt
+    // trafia pod widoczny obszar listy i wyglada na zniknietego.
+    private void _ScrollShelvedProjectIntoView(ProjectItem project)
+    {
+        if (!ShelvedProjects.Contains(project))
+            return;
+
+        ShelvedProjectsList.UpdateLayout();
+        ShelvedProjectsList.ScrollIntoView(project);
     }
 
     private void RestoreProjectMenuItem_Click(object sender, RoutedEventArgs e)

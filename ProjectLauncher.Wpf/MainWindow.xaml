@@ -399,7 +399,7 @@
                     Padding="8,5">
                 <ListBox x:Name="ShelvedProjectsList"
                          ItemsSource="{Binding ShelvedProjects}"
-                         MaxHeight="120"
+                         MaxHeight="300"
                          Background="Transparent"
                          BorderThickness="0"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
