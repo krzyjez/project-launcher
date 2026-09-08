@@ -8,6 +8,7 @@ Nie opisuje rozmowy z użytkownikiem o `branch start` i `branch finish`; od tego
 ```powershell
 branch help [command]
 branch status
+branch reconcile [--clear-sessions]
 branch sync [--base <branch>] [--clear-sessions]
 branch start <branch-name> "<description>"
 branch step-begin <name>
@@ -54,9 +55,11 @@ Opis w `step-end` ma krótko powiedzieć, co zostało zmienione. Może zawierać
 3. Nie zgaduj imienia agenta.
 4. Nie używaj `branch step-begin --noname`.
 
-## Sync
+## Reconcile i sync
 
-`branch sync` służy tylko do awaryjnego odzyskania zgodności lokalnego stanu `.workai\branch-state.json` z aktualnym branchem Git.
+`branch reconcile` jest zwykłym sposobem uzgodnienia lokalnego `.workai\branch-state.json` z markerem zapisanym w historii aktualnego brancha. Uruchamiaj go po checkout albo pull. Odtwarza stan na drugim komputerze, usuwa czysty stan pozostawiony po powrocie na bazę i nigdy nie tworzy układu, w którym branch roboczy jest równy bazowemu.
+
+`branch sync` służy do awaryjnego odzyskania starszego workflow bez markera. Bez parametrów korzysta z tej samej logiki co `reconcile`.
 
 Jeśli stan istnieje, użyj:
 
@@ -64,7 +67,7 @@ Jeśli stan istnieje, użyj:
 branch sync
 ```
 
-Jeśli stan nie istnieje, zapytaj użytkownika, do którego brancha obecna gałąź ma zostać zintegrowana przy `branch finish`, a potem użyj:
+Jeśli nie istnieje ani stan, ani marker, zapytaj użytkownika, do którego brancha obecna gałąź ma zostać zintegrowana przy `branch finish`, upewnij się, że worktree jest czysty, a potem użyj:
 
 ```powershell
 branch sync --base <branch>
