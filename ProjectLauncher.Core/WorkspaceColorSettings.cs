@@ -1,11 +1,11 @@
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Windows.Media;
 
-namespace ProjectLauncher.Wpf;
+namespace ProjectLauncher.Core;
 
 public static class WorkspaceColorSettings
 {
@@ -103,11 +103,11 @@ public static class WorkspaceColorSettings
         public static WorkspacePalette FromAccent(string accentHex)
         {
             var accent = ParseColor(accentHex);
-            var header = Mix(accent, Colors.Black, 0.55);
-            var headerMuted = Mix(accent, Colors.Black, 0.72);
-            var activityBar = Mix(accent, Colors.Black, 0.78);
-            var sidebar = Mix(accent, Colors.Black, 0.9);
-            var statusBar = Mix(accent, Colors.Black, 0.45);
+            var header = Mix(accent, Black, 0.55);
+            var headerMuted = Mix(accent, Black, 0.72);
+            var activityBar = Mix(accent, Black, 0.78);
+            var sidebar = Mix(accent, Black, 0.9);
+            var statusBar = Mix(accent, Black, 0.45);
             var foreground = ForegroundFor(header);
             var badgeForeground = ForegroundFor(accent);
 
@@ -124,37 +124,41 @@ public static class WorkspaceColorSettings
         }
     }
 
-    private static Color ParseColor(string value)
+    // Minimalny kolor RGB; Core nie moze zalezec od typow interfejsu uzytkownika.
+    private readonly record struct Rgb(byte R, byte G, byte B);
+
+    private static readonly Rgb Black = new(0, 0, 0);
+
+    // Parsuje zapis #RRGGBB; przy blednej wartosci wraca do domyslnego akcentu.
+    private static Rgb ParseColor(string value)
     {
-        try
-        {
-            var normalized = string.IsNullOrWhiteSpace(value)
-                ? "#FF6B1A"
-                : value.Trim().StartsWith('#') ? value.Trim() : $"#{value.Trim()}";
-            return (Color)ColorConverter.ConvertFromString(normalized);
-        }
-        catch
-        {
-            return (Color)ColorConverter.ConvertFromString("#FF6B1A");
-        }
+        var fallback = new Rgb(0xFF, 0x6B, 0x1A);
+        if (string.IsNullOrWhiteSpace(value))
+            return fallback;
+
+        var normalized = value.Trim().TrimStart('#');
+        if (normalized.Length != 6 || !int.TryParse(normalized, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var packed))
+            return fallback;
+
+        return new Rgb((byte)(packed >> 16), (byte)(packed >> 8), (byte)packed);
     }
 
-    private static Color Mix(Color first, Color second, double secondAmount)
+    private static Rgb Mix(Rgb first, Rgb second, double secondAmount)
     {
         var firstAmount = 1 - secondAmount;
-        return Color.FromRgb(
+        return new Rgb(
             (byte)Math.Round(first.R * firstAmount + second.R * secondAmount),
             (byte)Math.Round(first.G * firstAmount + second.G * secondAmount),
             (byte)Math.Round(first.B * firstAmount + second.B * secondAmount));
     }
 
-    private static string ForegroundFor(Color background)
+    private static string ForegroundFor(Rgb background)
     {
         var luminance = (0.2126 * background.R + 0.7152 * background.G + 0.0722 * background.B) / 255;
         return luminance > 0.56 ? "#101116" : "#FFFFFF";
     }
 
-    private static string ToHex(Color color)
+    private static string ToHex(Rgb color)
     {
         return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
     }

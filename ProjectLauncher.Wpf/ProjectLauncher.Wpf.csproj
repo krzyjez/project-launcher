@@ -12,4 +12,8 @@
     <PublishDir>$(MSBuildProjectDirectory)\..\dist\</PublishDir>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\ProjectLauncher.Core\ProjectLauncher.Core.csproj" />
+  </ItemGroup>
+
 </Project>
