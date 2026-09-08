@@ -86,7 +86,7 @@ public partial class MainWindow : Window
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory);
 
-        bitmap.Save(screenshotPath);
+        bitmap.Save(screenshotPath, PngBitmapEncoderOptions.Default);
     }
 
     // Odtwarza obie listy projektow z uwzglednieniem filtra tagow i biezacego sortowania.
