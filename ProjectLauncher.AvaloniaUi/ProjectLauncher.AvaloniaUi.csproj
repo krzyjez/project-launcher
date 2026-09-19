@@ -9,6 +9,8 @@
     <Version>1.1.2</Version>
     <!-- Pierwszy port trzyma sie bindingow refleksyjnych, tak jak oryginal WPF -->
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <!-- Publikacja trafia obok wersji WPF, ktora zostaje w katalogu dist -->
+    <PublishDir>$(MSBuildProjectDirectory)\..\dist-avalonia\</PublishDir>
     <ApplicationIcon>..\ProjectLauncher.Wpf\Assets\app-icon.ico</ApplicationIcon>
   </PropertyGroup>
 
@@ -21,5 +23,13 @@
   <ItemGroup>
     <ProjectReference Include="..\ProjectLauncher.Core\ProjectLauncher.Core.csproj" />
   </ItemGroup>
+
+  <!-- Natywne biblioteki Skii i HarfBuzz przynosza 100 MB symboli debugowania, ktore nie sa do niczego potrzebne -->
+  <Target Name="RemoveNativeSymbols" AfterTargets="Publish">
+    <ItemGroup>
+      <NativeSymbolFiles Include="$(PublishDir)*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(NativeSymbolFiles)" />
+  </Target>
 
 </Project>
