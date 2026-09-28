@@ -27,32 +27,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _suppressNextClick;
     private string? _screenshotPath;
     private ProjectSortMode _sortMode = ProjectSortMode.LastLaunched;
-    private bool _showDetails;
     private double _cardWidth = double.NaN;
     private bool _showShelved;
+    private bool _closeAllowed;
+    private bool _wasHidden;
+
+    /// <summary>Okno zyje w tle z ikona w zasobniku: zamkniecie je chowa, a pokazanie wczytuje swiezy stan</summary>
+    public bool IsResident { get; init; }
 
     public ObservableCollection<ProjectItem> ActiveProjects { get; } = [];
     public ObservableCollection<ProjectItem> ShelvedProjects { get; } = [];
     public ObservableCollection<TagFilterItem> TagFilters { get; } = [];
     public string LauncherVersion => typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "1.1.0";
-
-    public bool ShowDetails
-    {
-        get => _showDetails;
-        set
-        {
-            if (_showDetails == value)
-                return;
-
-            _showDetails = value;
-            _OnPropertyChanged();
-            _OnPropertyChanged(nameof(ProjectDetailsVisibility));
-        }
-    }
-
-    public Visibility ProjectDetailsVisibility => ShowDetails
-        ? Visibility.Visible
-        : Visibility.Collapsed;
 
     /// <summary>Glowna lista pokazuje odstawione projekty zamiast aktywnych</summary>
     public bool ShowShelved
@@ -106,20 +92,79 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ReadScreenshotArgument();
     }
 
-    private void LoadSettings()
+    /// <summary>Pokazuje okno na wierzchu; po wczesniejszym schowaniu wczytuje rejestr od nowa i odswieza stan Git</summary>
+    public void ShowLauncher()
     {
-        var settings = ProjectRegistry.LoadSettings();
-        _sortMode = settings.SortMode;
-        ShowDetails = settings.ShowDetails;
+        if (_wasHidden)
+        {
+            _wasHidden = false;
+            ShowShelved = false;
+            _ReloadProjects();
+        }
+
+        Show();
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+
+        // Chwilowe Topmost wyciaga okno ponad inne aplikacje, gdy samo Activate nie wystarcza.
+        Topmost = true;
+        Activate();
+        Topmost = false;
+        Focus();
     }
 
+    /// <summary>Pozwala naprawde zamknac okno przy wyjsciu z programu</summary>
+    public void AllowClose()
+    {
+        _closeAllowed = true;
+    }
+
+    // W trybie zasobnika kazde zamkniecie (Esc, ×, uruchomienie projektu, Alt+F4) tylko chowa okno.
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (IsResident && !_closeAllowed)
+        {
+            e.Cancel = true;
+            Hide();
+            _wasHidden = true;
+        }
+
+        base.OnClosing(e);
+    }
+
+    // Rejestr moglo zmienic inne narzedzie, gdy okno bylo schowane; ostatni znany stan Git zostaje do czasu odswiezenia.
+    private void _ReloadProjects()
+    {
+        var previousStatuses = _projects
+            .Where(project => project.GitStatus is not null)
+            .GroupBy(project => project.Path, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().GitStatus, StringComparer.OrdinalIgnoreCase);
+
+        LoadSettings();
+        LoadProjects();
+        foreach (var project in _projects)
+        {
+            if (previousStatuses.TryGetValue(project.Path, out var status))
+                project.GitStatus = status;
+        }
+
+        UpdateSortButtons();
+        RebuildTagFilters();
+        RebuildProjectLists();
+        _ = _RefreshGitStatusesAsync(_projects.ToList());
+    }
+
+    private void LoadSettings()
+    {
+        _sortMode = ProjectRegistry.LoadSettings().SortMode;
+    }
+
+    // WPF nie ma juz przelacznika Details; zachowujemy zapisana wartosc, bo uzywa jej wersja Avalonia.
     private void SaveSettings()
     {
-        ProjectRegistry.SaveSettings(new ProjectLauncherSettings
-        {
-            SortMode = _sortMode,
-            ShowDetails = ShowDetails
-        });
+        var settings = ProjectRegistry.LoadSettings();
+        settings.SortMode = _sortMode;
+        ProjectRegistry.SaveSettings(settings);
     }
 
     // Okno rosnie pod liczbe projektow (SizeToContent), ale nie wyzej niz uzyteczna wysokosc ekranu;
@@ -738,13 +783,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SortByLaunchCountButton.IsChecked = _sortMode == ProjectSortMode.LaunchCount;
         SortByLastLaunchedButton.IsChecked = _sortMode == ProjectSortMode.LastLaunched;
         SortByNameButton.IsChecked = _sortMode == ProjectSortMode.Name;
-    }
-
-    // Zapisuje preferencje widoku szczegolowego od razu po przelaczeniu.
-    private void _DetailsToggleButton_Click(object sender, RoutedEventArgs e)
-    {
-        ShowDetails = DetailsToggleButton.IsChecked == true;
-        SaveSettings();
     }
 
     // Przelacza pojedynczy tag bez zapisywania tymczasowego filtra do ustawien.

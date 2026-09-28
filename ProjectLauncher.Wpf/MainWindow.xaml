@@ -299,16 +299,13 @@
             </Setter>
         </Style>
 
-        <!-- Sciezka i agenci: widoczne po rozwinieciu karty albo po wlaczeniu Details dla wszystkich -->
+        <!-- Sciezka i agenci: widoczne po rozwinieciu karty -->
         <Style x:Key="CardDetailStyle" TargetType="{x:Type TextBlock}">
             <Setter Property="Visibility" Value="Collapsed" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                    <Setter Property="Visibility" Value="Visible" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding DataContext.ShowDetails, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
                     <Setter Property="Visibility" Value="Visible" />
                 </DataTrigger>
             </Style.Triggers>
@@ -373,14 +370,6 @@
             </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <ToggleButton x:Name="DetailsToggleButton"
-                              Content="Details"
-                              Click="_DetailsToggleButton_Click"
-                              IsChecked="{Binding ShowDetails, Mode=TwoWay}"
-                              ToolTip="Pokaz szczegoly projektu"
-                              Style="{StaticResource HeaderToggleButtonStyle}"
-                              Margin="0,0,8,0" />
-
                 <Button x:Name="AddProjectButton"
                         Content="+"
                         Click="AddProjectButton_Click"
@@ -653,7 +642,7 @@
                                                FontSize="12">
                                         <TextBlock.Style>
                                             <!-- Zawijanie musi byc ustawione w stylu, bo wartosc lokalna przeslonilaby wyzwalacze.
-                                                 Pelny opis: po rozwinieciu karty, w trybie Details i zawsze dla odstawionych. -->
+                                                 Pelny opis: po rozwinieciu karty i zawsze dla odstawionych. -->
                                             <Style TargetType="{x:Type TextBlock}">
                                                 <Setter Property="TextWrapping" Value="NoWrap" />
                                                 <Setter Property="TextTrimming" Value="CharacterEllipsis" />
@@ -663,10 +652,6 @@
                                                         <Setter Property="TextTrimming" Value="None" />
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding Shelved}" Value="True">
-                                                        <Setter Property="TextWrapping" Value="Wrap" />
-                                                        <Setter Property="TextTrimming" Value="None" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding DataContext.ShowDetails, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
                                                         <Setter Property="TextWrapping" Value="Wrap" />
                                                         <Setter Property="TextTrimming" Value="None" />
                                                     </DataTrigger>
