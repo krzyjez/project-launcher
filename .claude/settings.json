@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-signal hook",
+            "command": "agent-signal hook claude",
             "timeout": 10
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-signal hook",
+            "command": "agent-signal hook claude",
             "timeout": 10
           }
         ]
@@ -28,7 +28,64 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-signal hook",
+            "command": "agent-signal hook claude",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "agent-signal hook claude",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "agent-signal hook claude",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "agent-signal hook claude",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "agent-signal hook claude",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "agent-signal hook claude",
             "timeout": 10
           }
         ]
