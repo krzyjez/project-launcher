@@ -3,8 +3,8 @@ name: doc
 description: Twórz i aktualizuj trwałe dokumenty Markdown, specyfikacje, dokumentację techniczną i notatki projektowe.
 info: Komenda wspólna do pracy nad dokumentami.
 implicit-invocation: true
-version: 1
-modified-date: 2026-05-01
+version: 2
+modified-date: 2026-09-11
 ---
 
 # Zasady tworzenia trwałych plików tekstowych
@@ -15,7 +15,7 @@ Używaj tych zasad podczas tworzenia lub aktualizowania dokumentów tekstowych, 
 
 ### Format
 
-Dokumenty powinny być zapisane w formacie Markdown - chyba że użytkownik explicite poprosi o inny format ale domyślnie jest to Markdown. Kodowanie dokumentu to UTF-8 bez BOM.
+Dokumenty powinny być zapisane w formacie Markdown - chyba że użytkownik explicite poprosi o inny format ale domyślnie jest to Markdown. Kodowanie dokumentu to UTF-8 bez BOM. Nie łam linii ręcznie na stałej szerokości - edytor łamie tekst sam.
 
 ### Rozmiar dokumentu
 

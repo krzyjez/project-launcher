@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Media;
+using ProjectLauncher.Core;
 
 namespace ProjectLauncher.Wpf;
 

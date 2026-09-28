@@ -4,10 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Text.Encodings.Web;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -15,18 +11,13 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Microsoft.Win32;
+using ProjectLauncher.Core;
 
 namespace ProjectLauncher.Wpf;
 
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private const double WindowScreenMargin = 16;
-
-    private readonly JsonSerializerOptions _jsonOptions = new()
-    {
-        WriteIndented = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-    };
 
     private readonly ObservableCollection<ProjectItem> _projects = [];
     private Point _dragStartPoint;
@@ -76,47 +67,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ReadScreenshotArgument();
     }
 
-    private string ProjectsFilePath => ProjectLauncherPaths.GetProjectsFilePath();
-
-    private string SettingsFilePath => ProjectLauncherPaths.GetSettingsFilePath();
-
     private void LoadSettings()
     {
-        if (!File.Exists(SettingsFilePath))
-        {
-            return;
-        }
-
-        try
-        {
-            var json = File.ReadAllText(SettingsFilePath, Encoding.UTF8);
-            var settings = JsonSerializer.Deserialize<ProjectLauncherSettings>(json, _jsonOptions);
-            _sortMode = settings?.SortMode is ProjectSortMode.LaunchCount or ProjectSortMode.Name
-                ? settings.SortMode
-                : ProjectSortMode.LastLaunched;
-            ShowDetails = settings?.ShowDetails ?? false;
-        }
-        catch (JsonException)
-        {
-            _sortMode = ProjectSortMode.LastLaunched;
-            ShowDetails = false;
-        }
-        catch (IOException)
-        {
-            _sortMode = ProjectSortMode.LastLaunched;
-            ShowDetails = false;
-        }
+        var settings = ProjectRegistry.LoadSettings();
+        _sortMode = settings.SortMode;
+        ShowDetails = settings.ShowDetails;
     }
 
     private void SaveSettings()
     {
-        var settings = new ProjectLauncherSettings
+        ProjectRegistry.SaveSettings(new ProjectLauncherSettings
         {
             SortMode = _sortMode,
             ShowDetails = ShowDetails
-        };
-        var json = JsonSerializer.Serialize(settings, _jsonOptions);
-        File.WriteAllText(SettingsFilePath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        });
     }
 
     // Okno rosnie pod liczbe projektow (SizeToContent), ale nie wyzej niz uzyteczna wysokosc ekranu;
@@ -171,40 +135,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void LoadProjects()
     {
-        var json = File.ReadAllText(ProjectsFilePath, Encoding.UTF8);
-        var projects = JsonSerializer.Deserialize<List<ProjectItem>>(json, _jsonOptions) ?? [];
         _projects.Clear();
-
-        for (var index = 0; index < projects.Count; index++)
+        foreach (var project in ProjectRegistry.LoadProjects())
         {
-            var project = projects[index];
-            if (project.Order <= 0)
-            {
-                project.Order = index + 1;
-            }
-
-            if (string.IsNullOrWhiteSpace(project.Color))
-            {
-                project.Color = ProjectItem.DefaultColors[index % ProjectItem.DefaultColors.Length];
-            }
-
-            if (project.LegacyHidden == true)
-            {
-                project.Shelved = true;
-                project.LegacyHidden = null;
-            }
-
             _projects.Add(project);
         }
-
-        NormalizeProjectOrder();
     }
 
     private void SaveProjects()
     {
-        NormalizeProjectOrder();
-        var json = JsonSerializer.Serialize(_projects, _jsonOptions);
-        File.WriteAllText(ProjectsFilePath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        ProjectRegistry.SaveProjects(_projects);
     }
 
     private void RebuildProjectLists()
@@ -278,15 +218,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void NormalizeProjectOrder()
     {
-        var order = 1;
-        var orderedProjects = _projects.OrderBy(project => project.Order).ToList();
-        _projects.Clear();
-
-        foreach (var project in orderedProjects)
-        {
-            project.Order = order++;
-            _projects.Add(project);
-        }
+        ProjectRegistry.NormalizeOrder(_projects);
     }
 
     private void OpenProject(ProjectItem project)
@@ -333,9 +265,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         var projectPath = Path.GetFullPath(dialog.FolderName);
-        if (_projects.Any(project => SameProjectPath(project.Path, projectPath)))
+        var existingProject = _projects.FirstOrDefault(project => SameProjectPath(project.Path, projectPath));
+        if (existingProject is not null)
         {
-            MessageBox.Show(this, $"Ten katalog jest juz w rejestrze:\n{projectPath}", "Projekty", MessageBoxButton.OK, MessageBoxImage.Information);
+            // Odstawiony projekt nie jest widoczny w glownej liscie, wiec bez tej podpowiedzi
+            // komunikat wyglada jak blad rejestru.
+            var shelvedHint = existingProject.Shelved ? "\n\nProjekt jest wsrod odstawionych." : "";
+            MessageBox.Show(this, $"Ten katalog jest juz w rejestrze:\n{projectPath}{shelvedHint}", "Projekty", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -624,6 +560,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         project.Shelved = true;
         RebuildProjectLists();
         SaveProjects();
+        _ScrollShelvedProjectIntoView(project);
+    }
+
+    // Pokazuje odstawiony projekt w dolnej sekcji; bez tego swiezo odstawiony projekt
+    // trafia pod widoczny obszar listy i wyglada na zniknietego.
+    private void _ScrollShelvedProjectIntoView(ProjectItem project)
+    {
+        if (!ShelvedProjects.Contains(project))
+            return;
+
+        ShelvedProjectsList.UpdateLayout();
+        ShelvedProjectsList.ScrollIntoView(project);
     }
 
     private void RestoreProjectMenuItem_Click(object sender, RoutedEventArgs e)
@@ -745,20 +693,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private IEnumerable<ProjectItem> OrderedProjects()
     {
-        return _sortMode switch
-        {
-            ProjectSortMode.LaunchCount => _projects
-                .OrderByDescending(project => project.LaunchCount)
-                .ThenByDescending(project => project.LastLaunched)
-                .ThenBy(project => project.Order),
-            ProjectSortMode.Name => _projects
-                .OrderBy(project => project.Name, StringComparer.CurrentCultureIgnoreCase)
-                .ThenBy(project => project.Order),
-            _ => _projects
-                .OrderByDescending(project => project.LastLaunched)
-                .ThenByDescending(project => project.LaunchCount)
-                .ThenBy(project => project.Order)
-        };
+        return ProjectRegistry.Ordered(_projects, _sortMode);
     }
 
     private static ProjectItem? FindProjectItem(object sender)
@@ -815,409 +750,4 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         public NativeRect WorkArea;
         public uint Flags;
     }
-}
-
-public static class ProjectLauncherPaths
-{
-    public static string GetProjectsFilePath()
-    {
-        var targetDirectory = GetAiToolsDirectory();
-        Directory.CreateDirectory(targetDirectory);
-
-        var targetFile = Path.Combine(targetDirectory, "launch-projects.json");
-        if (File.Exists(targetFile))
-        {
-            return targetFile;
-        }
-
-        var legacyFile = FindLegacyProjectsFile();
-        if (legacyFile is not null)
-        {
-            File.Copy(legacyFile, targetFile, overwrite: false);
-            return targetFile;
-        }
-
-        return targetFile;
-    }
-
-    public static string GetSettingsFilePath()
-    {
-        var targetDirectory = GetAiToolsDirectory();
-        Directory.CreateDirectory(targetDirectory);
-
-        return Path.Combine(targetDirectory, "project-launcher-settings.json");
-    }
-
-    private static string GetAiToolsDirectory()
-    {
-        var overridePath = Environment.GetEnvironmentVariable("AI_TOOLS_HOME");
-        return string.IsNullOrWhiteSpace(overridePath)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ai-tools")
-            : Path.GetFullPath(overridePath);
-    }
-
-    private static string? FindLegacyProjectsFile()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(directory.FullName, "projects.json");
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            directory = directory.Parent;
-        }
-
-        return null;
-    }
-}
-
-public enum ProjectSortMode
-{
-    Order,
-    LaunchCount,
-    LastLaunched,
-    Name
-}
-
-public sealed class ProjectLauncherSettings
-{
-    [JsonPropertyName("sortMode")]
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public ProjectSortMode SortMode { get; set; } = ProjectSortMode.LastLaunched;
-
-    [JsonPropertyName("showDetails")]
-    public bool ShowDetails { get; set; }
-}
-
-public static class EditorLauncher
-{
-    /// <summary>Znajduje Visual Studio Code w typowych lokalizacjach Windows albo przez PATH.</summary>
-    public static string? ResolveEditorPath()
-    {
-        foreach (var candidate in _GetEditorCandidates())
-        {
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return _FindOnPath("code.cmd") ?? _FindOnPath("code.exe");
-    }
-
-    /// <summary>Tworzy parametry startowe otwierajace projekt w osobnym oknie VS Code.</summary>
-    public static ProcessStartInfo CreateStartInfo(string editorPath, string projectPath)
-    {
-        return new ProcessStartInfo
-        {
-            FileName = editorPath,
-            Arguments = $"--new-window \"{projectPath}\"",
-            UseShellExecute = true
-        };
-    }
-
-    // Zwraca najczestsze lokalizacje instalacji VS Code na Windows.
-    private static IEnumerable<string> _GetEditorCandidates()
-    {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
-
-        if (!string.IsNullOrWhiteSpace(localAppData))
-        {
-            yield return Path.Combine(localAppData, "Programs", "Microsoft VS Code", "Code.exe");
-            yield return Path.Combine(localAppData, "Programs", "Microsoft VS Code", "bin", "code.cmd");
-        }
-
-        if (!string.IsNullOrWhiteSpace(programFiles))
-        {
-            yield return Path.Combine(programFiles, "Microsoft VS Code", "Code.exe");
-            yield return Path.Combine(programFiles, "Microsoft VS Code", "bin", "code.cmd");
-        }
-
-        if (!string.IsNullOrWhiteSpace(programFilesX86))
-        {
-            yield return Path.Combine(programFilesX86, "Microsoft VS Code", "Code.exe");
-            yield return Path.Combine(programFilesX86, "Microsoft VS Code", "bin", "code.cmd");
-        }
-    }
-
-    // Szuka programu w katalogach z PATH bez uruchamiania shella.
-    private static string? _FindOnPath(string fileName)
-    {
-        var pathValue = Environment.GetEnvironmentVariable("PATH");
-        if (string.IsNullOrWhiteSpace(pathValue))
-        {
-            return null;
-        }
-
-        foreach (var directory in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var candidate = Path.Combine(directory, fileName);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
-    }
-}
-
-public sealed class ProjectItem : INotifyPropertyChanged
-{
-    public static readonly string[] DefaultColors =
-    [
-        "#FF6B1A",
-        "#F2C900",
-        "#2FBF8F",
-        "#59B9C0",
-        "#D9364A",
-        "#9B7CFF"
-    ];
-
-    public static readonly string[] ColorCandidates =
-    [
-        "#FF3B30", "#FF6B1A", "#FFCC00", "#B6F000", "#2ECC71", "#16E0A8",
-        "#00C2FF", "#3D7BFF", "#7C5CFF", "#B84DFF", "#FF4FD8", "#FF5C8A",
-        "#FFFFFF", "#D8D9E6", "#B8B8C8", "#85858F", "#5D6475", "#111318",
-        "#C62828", "#AD4B00", "#8D6E00", "#4D7C0F", "#00796B", "#006D9C",
-        "#283593", "#5B21B6", "#86198F", "#BE185D", "#7F1D1D", "#3F3F46"
-    ];
-
-    private int _number;
-    private int _order;
-    private string _name = "";
-    private string _path = "";
-    private string _description = "";
-    private string _color = "";
-    private List<string> _agentNames = [];
-    private List<string> _tags = [];
-    private string _lastLaunched = "";
-    private int _launchCount;
-    private bool _shelved;
-    private bool? _legacyHidden;
-
-    [JsonIgnore]
-    public int Number
-    {
-        get => _number;
-        set => SetField(ref _number, value);
-    }
-
-    [JsonPropertyName("order")]
-    public int Order
-    {
-        get => _order;
-        set => SetField(ref _order, value);
-    }
-
-    [JsonPropertyName("name")]
-    public string Name
-    {
-        get => _name;
-        set => SetField(ref _name, value);
-    }
-
-    [JsonPropertyName("path")]
-    public string Path
-    {
-        get => _path;
-        set => SetField(ref _path, value);
-    }
-
-    [JsonPropertyName("description")]
-    public string Description
-    {
-        get => _description;
-        set
-        {
-            if (SetField(ref _description, value))
-            {
-                OnPropertyChanged(nameof(DescriptionVisibility));
-                OnPropertyChanged(nameof(DescriptionFirstLine));
-            }
-        }
-    }
-
-    [JsonPropertyName("color")]
-    public string Color
-    {
-        get => _color;
-        set
-        {
-            if (SetField(ref _color, NormalizeColor(value)))
-            {
-                OnPropertyChanged(nameof(ProjectBrush));
-                OnPropertyChanged(nameof(AgentNamesText));
-            }
-        }
-    }
-
-    [JsonPropertyName("agentNames")]
-    public List<string> AgentNames
-    {
-        get => _agentNames;
-        set
-        {
-            if (SetField(ref _agentNames, value.Where(name => !string.IsNullOrWhiteSpace(name)).Select(name => name.Trim()).ToList()))
-            {
-                OnPropertyChanged(nameof(AgentNamesText));
-            }
-        }
-    }
-
-    [JsonPropertyName("tags")]
-    public List<string> Tags
-    {
-        get => _tags;
-        set => SetField(ref _tags, value.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList());
-    }
-
-    [JsonPropertyName("lastLaunched")]
-    public string LastLaunched
-    {
-        get => _lastLaunched;
-        set
-        {
-            if (SetField(ref _lastLaunched, value))
-            {
-                OnPropertyChanged(nameof(LaunchInfo));
-            }
-        }
-    }
-
-    [JsonPropertyName("launchCount")]
-    public int LaunchCount
-    {
-        get => _launchCount;
-        set
-        {
-            if (SetField(ref _launchCount, value))
-            {
-                OnPropertyChanged(nameof(LaunchInfo));
-            }
-        }
-    }
-
-    [JsonPropertyName("shelved")]
-    public bool Shelved
-    {
-        get => _shelved;
-        set => SetField(ref _shelved, value);
-    }
-
-    [JsonPropertyName("hidden")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public bool? LegacyHidden
-    {
-        get => _legacyHidden;
-        set => _legacyHidden = value;
-    }
-
-    [JsonIgnore]
-    public Brush ProjectBrush => CreateBrush(Color);
-
-    [JsonIgnore]
-    public string AgentNamesText => AgentNames.Count == 0
-        ? "Agenci: domyslna pula"
-        : $"Agenci: {string.Join(", ", AgentNames)}";
-
-    [JsonIgnore]
-    public string LaunchInfo => string.IsNullOrWhiteSpace(LastLaunchedDate)
-        ? $"{LaunchCount} ur."
-        : $"{LaunchCount} ur. - {LastLaunchedDate}";
-
-    // Pierwsza niepusta linia opisu; uzywana w kompaktowej sekcji projektow odstawionych.
-    [JsonIgnore]
-    public string DescriptionFirstLine => Description
-        .Split('\n')
-        .Select(line => line.Trim())
-        .FirstOrDefault(line => line.Length > 0) ?? "";
-
-    [JsonIgnore]
-    public Visibility DescriptionVisibility => string.IsNullOrWhiteSpace(Description)
-        ? Visibility.Collapsed
-        : Visibility.Visible;
-
-    private string LastLaunchedDate => LastLaunched.Length >= 10
-        ? LastLaunched[..10]
-        : LastLaunched;
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
-    {
-        if (EqualityComparer<T>.Default.Equals(field, value))
-        {
-            return false;
-        }
-
-        field = value;
-        OnPropertyChanged(propertyName);
-        return true;
-    }
-
-    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-    {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
-
-    private static Brush CreateBrush(string value)
-    {
-        try
-        {
-            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(NormalizeColor(value)));
-        }
-        catch (FormatException)
-        {
-            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(DefaultColors[0]));
-        }
-    }
-
-    private static string NormalizeColor(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return DefaultColors[0];
-        }
-
-        var trimmed = value.Trim();
-        return trimmed.StartsWith('#') ? trimmed.ToUpperInvariant() : $"#{trimmed.ToUpperInvariant()}";
-    }
-}
-
-public sealed class TagFilterItem : INotifyPropertyChanged
-{
-    private readonly Action _selectionChanged;
-    private bool _isSelected;
-
-    public TagFilterItem(string name, Action selectionChanged)
-    {
-        Name = name;
-        _selectionChanged = selectionChanged;
-    }
-
-    public string Name { get; }
-
-    public bool IsSelected
-    {
-        get => _isSelected;
-        set
-        {
-            if (_isSelected == value)
-            {
-                return;
-            }
-
-            _isSelected = value;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected)));
-            _selectionChanged();
-        }
-    }
-
-    public event PropertyChangedEventHandler? PropertyChanged;
 }

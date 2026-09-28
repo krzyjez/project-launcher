@@ -1,0 +1,364 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ProjectLauncher.AvaloniaUi"
+        x:Class="ProjectLauncher.AvaloniaUi.MainWindow"
+        Title="Projekty"
+        Width="930"
+        MinWidth="800"
+        MinHeight="360"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowDecorations="None"
+        WindowStartupLocation="CenterScreen"
+        Background="#090A0F"
+        Foreground="#F7F2E8"
+        PointerPressed="Window_PointerPressed"
+        KeyDown="Window_KeyDown">
+
+  <Window.Resources>
+    <local:ProjectColorToBrushConverter x:Key="ProjectColorToBrush" />
+    <local:TextIsNotEmptyConverter x:Key="TextIsNotEmpty" />
+
+    <SolidColorBrush x:Key="CardBackground" Color="#15161B" />
+    <SolidColorBrush x:Key="TextMuted" Color="#85858F" />
+    <SolidColorBrush x:Key="TextSubtle" Color="#C9C1AB" />
+    <SolidColorBrush x:Key="Accent" Color="#FF6B1A" />
+  </Window.Resources>
+
+  <Window.Styles>
+    <Style Selector="Button.header, ToggleButton.header">
+      <Setter Property="Background" Value="#15161B" />
+      <Setter Property="Foreground" Value="#C9C1AB" />
+      <Setter Property="BorderBrush" Value="#383A43" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="12,6" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
+    <Style Selector="Button.header:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1E2028" />
+      <Setter Property="BorderBrush" Value="#4A4C57" />
+    </Style>
+
+    <Style Selector="ToggleButton.header:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1E2028" />
+      <Setter Property="BorderBrush" Value="#4A4C57" />
+    </Style>
+
+    <Style Selector="ToggleButton.header:checked">
+      <Setter Property="Foreground" Value="#FF6B1A" />
+    </Style>
+
+    <Style Selector="ToggleButton.header:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1E2028" />
+      <Setter Property="BorderBrush" Value="#FF6B1A" />
+    </Style>
+
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="#15161B" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="14" />
+      <Setter Property="Padding" Value="14,12" />
+      <Setter Property="Margin" Value="0,0,0,10" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
+    <Style Selector="Border.card:pointerover">
+      <Setter Property="Background" Value="#1E2028" />
+    </Style>
+
+    <Style Selector="Button.tag">
+      <Setter Property="Background" Value="#15161B" />
+      <Setter Property="Foreground" Value="#C9C1AB" />
+      <Setter Property="BorderBrush" Value="#383A43" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Padding" Value="9,6" />
+      <Setter Property="Margin" Value="0,0,0,6" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
+    <Style Selector="Button.tag:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1E2028" />
+    </Style>
+
+    <Style Selector="Button.tag.selected">
+      <Setter Property="Foreground" Value="#FF6B1A" />
+      <Setter Property="BorderBrush" Value="#FF6B1A" />
+    </Style>
+
+    <Style Selector="Border.shelvedRow">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Padding" Value="0,1" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
+    <Style Selector="ToolTip">
+      <Setter Property="Background" Value="#15161B" />
+      <Setter Property="Foreground" Value="#C9C1AB" />
+      <Setter Property="BorderBrush" Value="#383A43" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="MaxWidth" Value="360" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="18">
+
+    <Grid DockPanel.Dock="Top" Margin="0,0,0,14" ColumnDefinitions="*,Auto">
+      <StackPanel>
+        <TextBlock Text="Projekty"
+                   FontSize="28"
+                   FontWeight="Bold"
+                   Foreground="#F7F2E8" />
+        <StackPanel Orientation="Horizontal" Margin="2,2,0,0">
+          <TextBlock Text="wspolny rejestr repozytoriow"
+                     FontSize="12"
+                     Foreground="{StaticResource TextMuted}" />
+          <TextBlock Text="{Binding LauncherVersion}"
+                     FontSize="12"
+                     Foreground="{StaticResource TextMuted}"
+                     Margin="10,0,0,0" />
+        </StackPanel>
+      </StackPanel>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+        <ToggleButton x:Name="DetailsButton"
+                      Classes="header"
+                      Content="Details"
+                      Click="DetailsButton_Click"
+                      Margin="0,0,8,0" />
+
+        <ToggleButton x:Name="SortByLaunchCountButton"
+                      Classes="header"
+                      Content="Uruchomienia"
+                      Tag="LaunchCount"
+                      Click="SortModeButton_Click"
+                      Margin="0,0,6,0" />
+
+        <ToggleButton x:Name="SortByLastLaunchedButton"
+                      Classes="header"
+                      Content="Ostatnio"
+                      Tag="LastLaunched"
+                      Click="SortModeButton_Click"
+                      Margin="0,0,6,0" />
+
+        <ToggleButton x:Name="SortByNameButton"
+                      Classes="header"
+                      Content="A–Z"
+                      Tag="Name"
+                      Click="SortModeButton_Click"
+                      Margin="0,0,8,0" />
+
+        <Button Classes="header"
+                Content="×"
+                Click="CloseButton_Click" />
+      </StackPanel>
+    </Grid>
+
+    <Border DockPanel.Dock="Right"
+            Width="155"
+            Margin="14,0,0,0"
+            Padding="10"
+            Background="#101116"
+            BorderBrush="#30313A"
+            BorderThickness="1"
+            CornerRadius="9">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top"
+                   Text="Tagi"
+                   Foreground="{StaticResource TextMuted}"
+                   FontSize="11"
+                   FontWeight="SemiBold"
+                   Margin="1,0,0,8" />
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+          <ItemsControl ItemsSource="{Binding TagFilters}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Button Classes="tag"
+                        Classes.selected="{Binding IsSelected}"
+                        Content="{Binding Name}"
+                        Click="TagFilterButton_Click" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </DockPanel>
+    </Border>
+
+    <StackPanel x:Name="ShelvedProjectsPanel"
+                DockPanel.Dock="Bottom"
+                Margin="0,6,0,0">
+      <TextBlock Text="Odstawione"
+                 Foreground="{StaticResource TextMuted}"
+                 FontSize="11"
+                 FontWeight="SemiBold"
+                 Margin="1,0,0,6" />
+
+      <Border Background="#101116"
+              BorderBrush="#30313A"
+              BorderThickness="1"
+              CornerRadius="9"
+              Padding="8,5">
+        <ScrollViewer MaxHeight="300"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+          <ItemsControl ItemsSource="{Binding ShelvedProjects}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Classes="shelvedRow"
+                        MinHeight="18"
+                        PointerReleased="ProjectCard_PointerReleased">
+                  <Border.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem Header="Aktywuj" Click="RestoreProjectMenuItem_Click" />
+                    </ContextMenu>
+                  </Border.ContextMenu>
+                  <ToolTip.Tip>
+                    <StackPanel>
+                      <TextBlock Text="Katalog"
+                                 Foreground="{StaticResource TextMuted}"
+                                 FontSize="10"
+                                 FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding Path}" TextWrapping="Wrap" Margin="0,2,0,8" />
+                      <TextBlock Text="{Binding AgentNamesText}"
+                                 Foreground="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
+                                 TextWrapping="Wrap" />
+                    </StackPanel>
+                  </ToolTip.Tip>
+
+                  <Grid ColumnDefinitions="Auto,*,Auto">
+                    <TextBlock Text="{Binding Name}"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
+                               TextTrimming="CharacterEllipsis" />
+
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding DescriptionFirstLine}"
+                               FontSize="10"
+                               Foreground="{StaticResource TextMuted}"
+                               Margin="10,2,0,0"
+                               TextTrimming="CharacterEllipsis" />
+
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding LaunchInfo}"
+                               FontSize="10"
+                               Foreground="{StaticResource TextMuted}"
+                               TextAlignment="Right"
+                               Margin="12,2,0,0" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Border>
+    </StackPanel>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+      <ItemsControl ItemsSource="{Binding ActiveProjects}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Border Classes="card"
+                    BorderBrush="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
+                    PointerReleased="ProjectCard_PointerReleased">
+              <Border.ContextMenu>
+                <ContextMenu>
+                  <MenuItem Header="Odstaw" Click="ShelveProjectMenuItem_Click" />
+                </ContextMenu>
+              </Border.ContextMenu>
+              <ToolTip.Tip>
+                <StackPanel>
+                  <TextBlock Text="Katalog"
+                             Foreground="{StaticResource TextMuted}"
+                             FontSize="10"
+                             FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding Path}" TextWrapping="Wrap" Margin="0,2,0,8" />
+                  <TextBlock Text="{Binding AgentNamesText}"
+                             Foreground="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
+                             TextWrapping="Wrap" />
+                </StackPanel>
+              </ToolTip.Tip>
+
+              <Grid ColumnDefinitions="16,34,*,145">
+                <Border Width="4"
+                        Height="28"
+                        CornerRadius="3"
+                        Background="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
+                        VerticalAlignment="Top"
+                        HorizontalAlignment="Left"
+                        Margin="0,3,0,0" />
+
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Number}"
+                           Foreground="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Top" />
+
+                <StackPanel Grid.Column="2">
+                  <TextBlock Text="{Binding Name}"
+                             FontSize="16"
+                             FontWeight="SemiBold"
+                             Foreground="#FFFFFF"
+                             TextTrimming="CharacterEllipsis" />
+
+                  <TextBlock Text="{Binding Path}"
+                             IsVisible="{Binding $parent[Window].DataContext.ShowDetails}"
+                             FontSize="11"
+                             Foreground="{StaticResource TextMuted}"
+                             Margin="0,5,12,0"
+                             TextTrimming="CharacterEllipsis" />
+
+                  <Panel IsVisible="{Binding Description, Converter={StaticResource TextIsNotEmpty}}">
+                    <TextBlock Text="{Binding Description}"
+                               IsVisible="{Binding !$parent[Window].DataContext.ShowDetails}"
+                               Foreground="{StaticResource TextSubtle}"
+                               FontSize="13"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="0,5,12,0" />
+
+                    <TextBlock Text="{Binding Description}"
+                               IsVisible="{Binding $parent[Window].DataContext.ShowDetails}"
+                               Foreground="{StaticResource TextSubtle}"
+                               FontSize="13"
+                               TextWrapping="Wrap"
+                               Margin="0,8,12,0" />
+                  </Panel>
+
+                  <TextBlock Text="{Binding AgentNamesText}"
+                             IsVisible="{Binding $parent[Window].DataContext.ShowDetails}"
+                             Foreground="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
+                             FontSize="11"
+                             FontWeight="SemiBold"
+                             TextTrimming="CharacterEllipsis"
+                             Margin="0,8,12,0" />
+                </StackPanel>
+
+                <TextBlock Grid.Column="3"
+                           Text="{Binding LaunchInfo}"
+                           Foreground="{StaticResource TextMuted}"
+                           FontSize="11"
+                           TextAlignment="Right"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Top" />
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+  </DockPanel>
+
+</Window>

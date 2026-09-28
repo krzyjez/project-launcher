@@ -1,12 +1,10 @@
 ---
 name: assisted-review
 description: Prowadź iteracyjny, wspomagany przegląd koncepcji, decyzji lub stanu opisanego w jednym pliku tekstowym na podstawie komentarzy użytkownika umieszczonych między znacznikami. Używaj, gdy użytkownik chce merytorycznie omówić każdą uwagę, zatwierdzić rozstrzygnięcie, a dopiero potem zaktualizować dokument.
-metadata:
-  version: "3"
-  modified-date: "2026-07-30"
-  source_component: "components/common/assisted-review-cmd.md"
-  source_version: "3"
-  source_modified_date: "2026-07-30"
+info: Komenda wspólna do pracy nad koncepcją za pomocą dokumentu z komentarzami użytkownika, w tym nad dokumentacją techniczną weryfikowaną względem kodu.
+implicit-invocation: true
+version: 3
+modified-date: 2026-07-30
 ---
 
 # Assisted Review
