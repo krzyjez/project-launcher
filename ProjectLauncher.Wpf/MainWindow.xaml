@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:ProjectLauncher.Wpf"
         mc:Ignorable="d"
         Title="Projekty"
-        Width="1240"
+        Width="1480"
         MinWidth="800"
         MinHeight="360"
         SizeToContent="Height"
@@ -199,7 +199,7 @@
         <Style x:Key="ProjectCardContainerStyle" TargetType="{x:Type ListBoxItem}">
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="Margin" Value="0,0,10,10" />
+            <Setter Property="Margin" Value="0,0,0,12" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -214,9 +214,9 @@
 
         <Style x:Key="ProjectCardStyle" TargetType="{x:Type Border}">
             <Setter Property="Background" Value="{StaticResource CardBackground}" />
-            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderThickness" Value="2.5" />
             <Setter Property="CornerRadius" Value="12" />
-            <Setter Property="Padding" Value="12,9" />
+            <Setter Property="Padding" Value="12,10" />
             <Setter Property="Cursor" Value="Hand" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
@@ -348,6 +348,10 @@
     </Window.Resources>
 
     <DockPanel Margin="18">
+        <!-- Cale okno w powiekszeniu 120%, jak skala interfejsu w wizualizerze sesji; szerokosc okna uwzglednia to powiekszenie -->
+        <DockPanel.LayoutTransform>
+            <ScaleTransform ScaleX="1.2" ScaleY="1.2" />
+        </DockPanel.LayoutTransform>
         <Grid DockPanel.Dock="Top" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -475,15 +479,13 @@
                  BorderThickness="0"
                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                 SizeChanged="_ProjectsList_SizeChanged"
                  PreviewMouseLeftButtonDown="ProjectsList_PreviewMouseLeftButtonDown"
                  MouseMove="ProjectsList_MouseMove"
                  Drop="ProjectsList_Drop"
                  AllowDrop="True">
             <ListBox.ItemsPanel>
                 <ItemsPanelTemplate>
-                    <WrapPanel Orientation="Horizontal"
-                               ItemWidth="{Binding DataContext.CardWidth, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" />
+                    <local:TwoColumnPanel ColumnGap="12" />
                 </ItemsPanelTemplate>
             </ListBox.ItemsPanel>
             <ListBox.ItemTemplate>
@@ -584,20 +586,24 @@
                                             </Style>
                                         </StackPanel.Style>
 
-                                        <Border Background="#20222A"
+                                        <Border Background="#262933"
                                                 CornerRadius="6"
-                                                Padding="7,1">
+                                                Padding="8,2">
                                             <TextBlock Text="{Binding GitStatus.Branch}"
-                                                       Foreground="{StaticResource TextSubtle}"
-                                                       FontSize="11"
-                                                       MaxWidth="160"
+                                                       Foreground="#E4DDCB"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       MaxWidth="190"
                                                        TextTrimming="CharacterEllipsis" />
                                         </Border>
 
-                                        <TextBlock Text="●"
-                                                   FontSize="11"
+                                        <!-- Kropka i opis stanu w tym samym kolorze, zeby flaga byla czytelna z daleka -->
+                                        <TextBlock FontSize="13"
+                                                   FontWeight="Bold"
                                                    VerticalAlignment="Center"
-                                                   Margin="8,0,4,0">
+                                                   Margin="10,0,0,0">
+                                            <Run Text="● " />
+                                            <Run Text="{Binding GitStatus.StateLabel, Mode=OneWay}" />
                                             <TextBlock.Style>
                                                 <Style TargetType="{x:Type TextBlock}">
                                                     <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
@@ -615,16 +621,11 @@
                                                 </Style>
                                             </TextBlock.Style>
                                         </TextBlock>
-
-                                        <TextBlock Text="{Binding GitStatus.StateLabel}"
-                                                   Foreground="{StaticResource TextMuted}"
-                                                   FontSize="11"
-                                                   VerticalAlignment="Center" />
                                     </StackPanel>
 
                                     <TextBlock Text="{Binding Name}"
-                                               FontSize="15"
-                                               FontWeight="SemiBold"
+                                               FontSize="17"
+                                               FontWeight="Bold"
                                                Foreground="#FFFFFF"
                                                TextTrimming="CharacterEllipsis" />
                                 </DockPanel>
@@ -633,32 +634,15 @@
                                     <TextBlock DockPanel.Dock="Right"
                                                Text="{Binding LaunchInfo}"
                                                Foreground="{StaticResource TextMuted}"
-                                               FontSize="10"
+                                               FontSize="11"
                                                VerticalAlignment="Bottom"
                                                Margin="10,0,0,1" />
 
+                                    <!-- Opis zawsze w calosci; strzalka rozwija tylko sciezke i agentow -->
                                     <TextBlock Text="{Binding Description}"
                                                Foreground="{StaticResource TextSubtle}"
-                                               FontSize="12">
-                                        <TextBlock.Style>
-                                            <!-- Zawijanie musi byc ustawione w stylu, bo wartosc lokalna przeslonilaby wyzwalacze.
-                                                 Pelny opis: po rozwinieciu karty i zawsze dla odstawionych. -->
-                                            <Style TargetType="{x:Type TextBlock}">
-                                                <Setter Property="TextWrapping" Value="NoWrap" />
-                                                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                                                        <Setter Property="TextWrapping" Value="Wrap" />
-                                                        <Setter Property="TextTrimming" Value="None" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding Shelved}" Value="True">
-                                                        <Setter Property="TextWrapping" Value="Wrap" />
-                                                        <Setter Property="TextTrimming" Value="None" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
+                                               FontSize="13"
+                                               TextWrapping="Wrap" />
                                 </DockPanel>
 
                                 <TextBlock Text="{Binding Path}"

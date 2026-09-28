@@ -18,8 +18,6 @@ namespace ProjectLauncher.Wpf;
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private const double WindowScreenMargin = 16;
-    // Miejsce na pionowy suwak; rezerwujemy je zawsze, zeby karty nie przeskakiwaly, gdy suwak sie pojawi.
-    private const double ScrollBarReserve = 17;
     private const int GitParallelism = 6;
 
     private readonly ObservableCollection<ProjectItem> _projects = [];
@@ -27,7 +25,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _suppressNextClick;
     private string? _screenshotPath;
     private ProjectSortMode _sortMode = ProjectSortMode.LastLaunched;
-    private double _cardWidth = double.NaN;
     private bool _showShelved;
     private bool _closeAllowed;
     private bool _wasHidden;
@@ -59,20 +56,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ObservableCollection<ProjectItem> VisibleProjects => ShowShelved ? ShelvedProjects : ActiveProjects;
 
     public string ShelvedButtonText => $"Odstawione ({ShelvedProjects.Count})";
-
-    /// <summary>Szerokosc jednej karty w dwukolumnowej liscie projektow</summary>
-    public double CardWidth
-    {
-        get => _cardWidth;
-        private set
-        {
-            if (_cardWidth.Equals(value))
-                return;
-
-            _cardWidth = value;
-            _OnPropertyChanged();
-        }
-    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -529,13 +512,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         WindowScreenshot.SaveToPng(this, _screenshotPath);
         Close();
-    }
-
-    // Dzieli szerokosc listy na dwie kolumny kart.
-    private void _ProjectsList_SizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        if (e.WidthChanged && ProjectsList.ActualWidth > ScrollBarReserve)
-            CardWidth = Math.Floor((ProjectsList.ActualWidth - ScrollBarReserve) / 2);
     }
 
     // Doczytuje stan Git w tle: najpierw szybki stan lokalny wszystkich projektow, potem porownanie z GitHubem.
