@@ -38,6 +38,7 @@ public sealed class ProjectItem : INotifyPropertyChanged
     private bool _shelved;
     private bool? _legacyHidden;
     private GitRepositoryStatus? _gitStatus;
+    private bool _isExpanded;
 
     [JsonIgnore]
     public int Number
@@ -152,6 +153,14 @@ public sealed class ProjectItem : INotifyPropertyChanged
     {
         get => _legacyHidden;
         set => _legacyHidden = value;
+    }
+
+    // Rozwiniecie pojedynczej karty jest stanem widoku tylko na czas dzialania launchera.
+    [JsonIgnore]
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set => SetField(ref _isExpanded, value);
     }
 
     // Stan Git jest odczytywany przy kazdym pokazaniu listy, wiec nie trafia do rejestru.

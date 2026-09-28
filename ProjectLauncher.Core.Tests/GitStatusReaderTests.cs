@@ -149,6 +149,41 @@ public class GitStatusReaderTests
         Assert.Equal(GitSyncState.NoRemote, await ReadSyncAsync(work));
     }
 
+    [Fact]
+    public void ParseWorktrees_skips_current_bare_and_prunable_entries()
+    {
+        var output = "worktree P:/repo\nHEAD 111\nbranch refs/heads/main\n\n" +
+                     "worktree P:/repo-feature\nHEAD 222\nbranch refs/heads/feature/login\n\n" +
+                     "worktree P:/repo-detached\nHEAD 3333333333\ndetached\n\n" +
+                     "worktree P:/repo-gone\nHEAD 444\nbranch refs/heads/old\nprunable gitdir file points to non-existent location\n\n" +
+                     "worktree P:/repo.git\nbare\n";
+
+        var worktrees = GitStatusReader.ParseWorktrees(output, @"P:\repo\");
+
+        Assert.Equal(2, worktrees.Count);
+        Assert.Equal("feature/login", worktrees[0].Branch);
+        Assert.EndsWith("repo-feature", worktrees[0].Path);
+        Assert.Equal("3333333", worktrees[1].Branch);
+    }
+
+    [Fact]
+    public async Task ReadLocalAsync_lists_other_worktrees_from_both_sides()
+    {
+        using var directory = new TempDirectory();
+        var main = directory.Create("main");
+        var linked = System.IO.Path.Combine(directory.Path, "linked");
+        Git(main, "init", "--initial-branch=main");
+        Commit(main, "a.txt");
+        Git(main, "worktree", "add", "-b", "feature", linked);
+
+        var fromMain = await GitStatusReader.ReadLocalAsync(main);
+        var fromLinked = await GitStatusReader.ReadLocalAsync(linked);
+
+        Assert.Equal("feature", Assert.Single(fromMain.Worktrees).Branch);
+        Assert.Equal("feature", fromLinked.Branch);
+        Assert.Equal("main", Assert.Single(fromLinked.Worktrees).Branch);
+    }
+
     private static GitRepositoryStatus ProjectStatus(string output) => GitStatusReader.ParseStatus(output);
 
     private static async Task<GitSyncState> ReadSyncAsync(string repositoryPath)

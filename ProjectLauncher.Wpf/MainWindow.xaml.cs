@@ -29,6 +29,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private ProjectSortMode _sortMode = ProjectSortMode.LastLaunched;
     private bool _showDetails;
     private double _cardWidth = double.NaN;
+    private bool _showShelved;
 
     public ObservableCollection<ProjectItem> ActiveProjects { get; } = [];
     public ObservableCollection<ProjectItem> ShelvedProjects { get; } = [];
@@ -53,7 +54,27 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ? Visibility.Visible
         : Visibility.Collapsed;
 
-    /// <summary>Szerokosc jednej karty w dwukolumnowej liscie aktywnych projektow</summary>
+    /// <summary>Glowna lista pokazuje odstawione projekty zamiast aktywnych</summary>
+    public bool ShowShelved
+    {
+        get => _showShelved;
+        set
+        {
+            if (_showShelved == value)
+                return;
+
+            _showShelved = value;
+            _OnPropertyChanged();
+            _OnPropertyChanged(nameof(VisibleProjects));
+        }
+    }
+
+    /// <summary>Projekty wyswietlane w glownej liscie: aktywne albo odstawione</summary>
+    public ObservableCollection<ProjectItem> VisibleProjects => ShowShelved ? ShelvedProjects : ActiveProjects;
+
+    public string ShelvedButtonText => $"Odstawione ({ShelvedProjects.Count})";
+
+    /// <summary>Szerokosc jednej karty w dwukolumnowej liscie projektow</summary>
     public double CardWidth
     {
         get => _cardWidth;
@@ -180,6 +201,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
             if (project.Shelved)
             {
+                project.Number = 0;
                 ShelvedProjects.Add(project);
                 continue;
             }
@@ -188,9 +210,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             ActiveProjects.Add(project);
         }
 
-        ShelvedProjectsPanel.Visibility = ShelvedProjects.Count == 0
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        // Po przywroceniu ostatniego odstawionego projektu nie ma czego pokazywac w widoku odstawionych.
+        if (ShelvedProjects.Count == 0)
+            ShowShelved = false;
+
+        ShelvedToggleButton.IsEnabled = ShelvedProjects.Count > 0 || ShowShelved;
+        _OnPropertyChanged(nameof(ShelvedButtonText));
     }
 
     // Odtwarza panel tagow po zmianie danych projektow, zachowujac aktywne filtry.
@@ -239,8 +264,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ProjectRegistry.NormalizeOrder(_projects);
     }
 
-    private void OpenProject(ProjectItem project)
+    // Otwiera katalog projektu albo wskazany worktree tego projektu; oba licza sie jako uruchomienie projektu.
+    private void OpenProject(ProjectItem project, string? worktreePath = null)
     {
+        var targetPath = worktreePath ?? project.Path;
         var editorPath = EditorLauncher.ResolveEditorPath();
         if (editorPath is null)
         {
@@ -248,18 +275,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        if (!Directory.Exists(project.Path))
+        if (!Directory.Exists(targetPath))
         {
-            MessageBox.Show(this, $"Nie znaleziono projektu:\n{project.Path}", "Projekty", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, $"Nie znaleziono projektu:\n{targetPath}", "Projekty", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
 
         project.LaunchCount++;
         project.LastLaunched = DateTime.Now.ToString("yyyy-MM-dd");
         SaveProjects();
-        WorkspaceColorSettings.Apply(project.Path, project.Color);
+        WorkspaceColorSettings.Apply(targetPath, project.Color);
 
-        Process.Start(EditorLauncher.CreateStartInfo(editorPath, project.Path));
+        Process.Start(EditorLauncher.CreateStartInfo(editorPath, targetPath));
 
         Close();
     }
@@ -428,12 +455,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         if (e.Key == Key.Escape)
         {
-            Close();
+            // Z widoku odstawionych Escape wraca do aktywnych zamiast zamykac launcher.
+            if (ShowShelved)
+                ShowShelved = false;
+            else
+                Close();
+
             return;
         }
 
         var number = KeyToNumber(e.Key);
-        if (number is not null && number.Value >= 1 && number.Value <= ActiveProjects.Count)
+        if (!ShowShelved && number is not null && number.Value >= 1 && number.Value <= ActiveProjects.Count)
         {
             OpenProject(ActiveProjects[number.Value - 1]);
         }
@@ -625,18 +657,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         project.Shelved = true;
         RebuildProjectLists();
         SaveProjects();
-        _ScrollShelvedProjectIntoView(project);
     }
 
-    // Pokazuje odstawiony projekt w dolnej sekcji; bez tego swiezo odstawiony projekt
-    // trafia pod widoczny obszar listy i wyglada na zniknietego.
-    private void _ScrollShelvedProjectIntoView(ProjectItem project)
+    // Otwiera VS Code w katalogu worktree kliknietego na karcie projektu.
+    private void _WorktreeButton_Click(object sender, RoutedEventArgs e)
     {
-        if (!ShelvedProjects.Contains(project))
+        if (sender is not FrameworkElement { DataContext: GitWorktree worktree })
             return;
 
-        ShelvedProjectsList.UpdateLayout();
-        ShelvedProjectsList.ScrollIntoView(project);
+        if (FindAncestor<ListBoxItem>(sender as DependencyObject)?.DataContext is ProjectItem project)
+            OpenProject(project, worktree.Path);
     }
 
     private void RestoreProjectMenuItem_Click(object sender, RoutedEventArgs e)

@@ -22,6 +22,9 @@ public enum GitStateKind
     Pending
 }
 
+/// <summary>Dodatkowy worktree repozytorium, ktory mozna otworzyc w edytorze obok glownego katalogu projektu</summary>
+public sealed record GitWorktree(string Path, string Branch);
+
 /// <summary>Migawka stanu repozytorium projektu: biezaca galaz, czystosc worktree i synchronizacja z remote</summary>
 public sealed record GitRepositoryStatus
 {
@@ -46,6 +49,9 @@ public sealed record GitRepositoryStatus
 
     /// <summary>Liczba lokalnych commitow, ktorych nie ma w remote; znaczace przy `Sync == Ahead`</summary>
     public int AheadCount { get; init; }
+
+    /// <summary>Pozostale worktree repozytorium, bez tego, w ktorym lezy katalog projektu</summary>
+    public IReadOnlyList<GitWorktree> Worktrees { get; init; } = [];
 
     /// <summary>Kategoria stanu decydujaca o kolorze flagi na karcie</summary>
     public GitStateKind StateKind

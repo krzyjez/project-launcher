@@ -42,6 +42,20 @@ public sealed class ProjectColorToBrushConverter : IValueConverter
     }
 }
 
+/// <summary>Pokazuje element, gdy powiazana flaga jest wylaczona; odwrotnosc wbudowanego BooleanToVisibilityConverter</summary>
+public sealed class InverseBooleanToVisibilityConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        return value is true ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotSupportedException();
+    }
+}
+
 /// <summary>Ukrywa element, gdy powiazany tekst jest pusty</summary>
 public sealed class EmptyTextToVisibilityConverter : IValueConverter
 {

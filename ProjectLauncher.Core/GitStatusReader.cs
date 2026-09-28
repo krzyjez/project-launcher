@@ -16,9 +16,44 @@ public static class GitStatusReader
             return GitRepositoryStatus.NotRepository;
 
         var result = await _RunGitAsync(repositoryPath, ["status", "--porcelain=v2", "--branch"], LocalTimeout, cancellationToken);
-        return result.ExitCode == 0
-            ? ParseStatus(result.Output)
-            : GitRepositoryStatus.NotRepository;
+        if (result.ExitCode != 0)
+            return GitRepositoryStatus.NotRepository;
+
+        var status = ParseStatus(result.Output);
+        var topLevel = await _RunGitAsync(repositoryPath, ["rev-parse", "--show-toplevel"], LocalTimeout, cancellationToken);
+        var worktrees = await _RunGitAsync(repositoryPath, ["worktree", "list", "--porcelain"], LocalTimeout, cancellationToken);
+        if (topLevel.ExitCode != 0 || worktrees.ExitCode != 0)
+            return status;
+
+        return status with { Worktrees = ParseWorktrees(worktrees.Output, topLevel.Output.Trim()) };
+    }
+
+    /// <summary>Parsuje `git worktree list --porcelain`, pomijajac biezacy worktree, repozytoria bare i usuniete katalogi</summary>
+    public static IReadOnlyList<GitWorktree> ParseWorktrees(string porcelainOutput, string currentWorktreePath)
+    {
+        var worktrees = new List<GitWorktree>();
+        var current = _NormalizePath(currentWorktreePath);
+
+        foreach (var block in porcelainOutput.Replace("\r", "").Split("\n\n", StringSplitOptions.RemoveEmptyEntries))
+        {
+            var lines = block.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var path = lines.FirstOrDefault(line => line.StartsWith("worktree ", StringComparison.Ordinal))?["worktree ".Length..];
+            if (path is null || lines.Any(line => line == "bare" || line.StartsWith("prunable", StringComparison.Ordinal)))
+                continue;
+
+            if (string.Equals(_NormalizePath(path), current, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var branchRef = lines.FirstOrDefault(line => line.StartsWith("branch ", StringComparison.Ordinal))?["branch ".Length..];
+            var head = lines.FirstOrDefault(line => line.StartsWith("HEAD ", StringComparison.Ordinal))?["HEAD ".Length..] ?? "";
+            var branch = branchRef is not null
+                ? branchRef.Replace("refs/heads/", "")
+                : head.Length >= 7 ? head[..7] : head;
+
+            worktrees.Add(new GitWorktree(path.Replace('/', System.IO.Path.DirectorySeparatorChar), branch));
+        }
+
+        return worktrees;
     }
 
     /// <summary>Porownuje lokalny HEAD z galezia na remote przez `git ls-remote`, ktory niczego nie zapisuje w repozytorium</summary>
@@ -152,6 +187,12 @@ public static class GitStatusReader
 
         var fallbackRemote = remoteNames.Contains("origin") ? "origin" : remoteNames[0];
         return (fallbackRemote, local.Branch);
+    }
+
+    // Git podaje sciezki z `/`; porownanie ma byc odporne na separatory i koncowy ukosnik.
+    private static string _NormalizePath(string path)
+    {
+        return path.Trim().Replace('\\', '/').TrimEnd('/');
     }
 
     private static bool _TryReadHeader(string line, string prefix, out string value)
