@@ -6,10 +6,13 @@ Powstal jako praktyczna alternatywa dla menu Start i PowerToys Run, ktore przy k
 
 ## Pliki
 
-1. `ProjectLauncher.Wpf` - aplikacja WPF z kartami projektow, drag/drop, odstawianiem rzadziej uzywanych projektow i edycja danych projektu.
-2. `project-launcher.ps1` - starszy launcher PowerShell/Windows Forms, zostawiony jako fallback.
-3. `%USERPROFILE%\ai-tools\launch-projects.json` - wspolny rejestr projektow uzywany przez launcher i narzedzia takie jak wizualizer sesji agentow.
-4. `readme.md` - opis narzedzia.
+1. `ProjectLauncher.Wpf` - glowna aplikacja WPF: karty projektow w dwoch kolumnach, stan Git, worktree, odstawianie projektow, edycja danych projektu i ikona w zasobniku. Publikowana do `dist`.
+2. `ProjectLauncher.Core` - biblioteka na czystym `net9.0` z cala logika: model projektu, obsluga rejestru i ustawien, uruchamianie edytora, odczyt stanu Git, tlumaczenie sciezek Windows/Linux.
+3. `ProjectLauncher.Core.Tests` - testy xUnit biblioteki `Core`.
+4. `ProjectLauncher.AvaloniaUi` - niedokonczony port na Avalonie z mysla o Linuksie, publikowany do `dist-avalonia`. Korzysta z tego samego `launch-projects.json` co wersja WPF i zapisuje do niego `lastLaunched`, `launchCount` oraz `shelved`.
+5. `project-launcher.ps1` - starszy launcher PowerShell/Windows Forms, zostawiony jako fallback.
+6. `%USERPROFILE%\ai-tools\launch-projects.json` - wspolny rejestr projektow uzywany przez launcher i narzedzia takie jak wizualizer sesji agentow.
+7. `readme.md` - opis narzedzia.
 
 ## Wspolny rejestr projektow
 
@@ -73,6 +76,12 @@ Przyklad:
 
 ## Uruchamianie
 
+Launcher dziala w tle z ikona rakiety w zasobniku systemowym. Klikniecie ikony pokazuje okno. Menu ikony zawiera `Pokaz projekty`, `Uruchamiaj przy starcie Windows` oraz `Zakoncz`; tylko `Zakoncz` naprawde zamyka program.
+
+Dziala tylko jedna instancja launchera. Kolejne uruchomienie exe, na przyklad ze skrotu, nie otwiera drugiej kopii, tylko pokazuje okno dzialajacej instancji.
+
+Opcja `Uruchamiaj przy starcie Windows` dodaje wpis `ProjectLauncher` w `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` ze sciezka aktualnie uruchomionego exe i argumentem `--tray`, ktory startuje program schowany w zasobniku.
+
 Launcher jest podpiety pod skrot `Projekty.lnk`, utworzony na pulpicie i w menu Start.
 
 Domyslny hotkey skrotu to:
@@ -89,19 +98,25 @@ Alt + Spacja -> Projekty -> Enter
 
 ## Zachowanie
 
-1. Okno pokazuje kompaktowa liste projektow: numer, nazwe projektu oraz licznik uruchomien i date ostatniego uruchomienia.
-2. Wysokosc okna dopasowuje sie do liczby projektow, ale nie przekracza uzytecznej wysokosci ekranu; lista aktywnych projektow przewija sie dopiero wtedy, gdy karty nie mieszcza sie na monitorze. Limit jest liczony dla monitora, na ktorym stoi okno, i przelicza sie automatycznie po przeniesieniu okna na inny monitor.
-3. Przelacznik `Details` pokazuje lub ukrywa sciezke, opis i preferowane imiona agentow dla projektu.
-4. Kolor projektu jest widoczny jako akcent karty i pozostaje zapisany w `launch-projects.json`.
-5. Klikniecie dowolnego miejsca na karcie projektu uruchamia Visual Studio Code z odpowiednim folderem w osobnym oknie.
-6. Klawisze `1`-`9` uruchamiaja projekt o odpowiadajacym numerze na liscie.
-7. Po udanym kliknieciu albo uzyciu numeru `lastLaunched` i `launchCount` w `launch-projects.json` sa aktualizowane automatycznie.
-8. Menu kontekstowe karty pozwala edytowac nazwe, kolor, opis i imiona agentow.
-9. Rzadziej uzywany projekt mozna odstawic. Odstawione projekty pozostaja widoczne na dole okna mala czcionka i mozna je przywrocic do aktywnych. Wiersz odstawionego projektu pokazuje nazwe i pierwsza linie opisu; sciezka pozostaje w dymku karty.
-10. Przyciski sortowania w naglowku wybieraja kolejnosc po `launchCount`, dacie `lastLaunched` albo alfabetycznie po nazwie; domyslny tryb to data ostatniego uruchomienia.
-11. Odstawiony projekt mozna przywrocic albo usunac calkowicie z rejestru.
-12. Panel tagow po prawej stronie filtruje aktywne i odstawione projekty; przy kilku zaznaczonych tagach wystarczy dopasowanie dowolnego z nich.
-13. Wybrane tagi sa filtrem tymczasowym i nie sa zapisywane po zamknieciu launchera.
-14. W widoku skroconym karta projektu pokazuje jedna linie opisu; widok `Details` rozwija pelny opis wraz ze sciezka i imionami agentow.
-15. Numer wersji aplikacji jest widoczny pod naglowkiem `Projekty`.
-16. Okno nie ma belki tytulu, ale mozna je przeciagac chwytajac dowolne puste miejsce: naglowek, marginesy, tlo listy albo tlo panelu tagow. Przyciski, suwaki i karty projektow nie przenosza okna.
+1. Karty aktywnych projektow ukladaja sie wierszami w dwie kolumny (1 i 2 w pierwszym rzedzie, 3 i 4 w drugim). Karta pokazuje numer, nazwe, jedna linie opisu oraz licznik uruchomien i date ostatniego uruchomienia.
+2. Wysokosc okna dopasowuje sie do liczby rzedow kart, ale nie przekracza uzytecznej wysokosci ekranu; lista przewija sie dopiero wtedy, gdy karty nie mieszcza sie na monitorze. Limit jest liczony dla monitora, na ktorym stoi okno, i przelicza sie automatycznie po przeniesieniu okna na inny monitor.
+3. Karta repozytorium Git pokazuje biezaca galaz i flage stanu:
+   - pomaranczowa `brudne` - niezacommitowane albo nowe pliki;
+   - zielona `czyste` - galaz jest taka sama jak na GitHubie;
+   - zolta `czyste ↑N` - N lokalnych commitow niewypchnietych na GitHuba; zolte sa tez `brak na GitHubie`, `nowsze na GitHubie`, `bez GitHuba` i `GitHub niedostepny`.
+4. Stan lokalny pojawia sie od razu, a porownanie z GitHubem chwile pozniej. Launcher uzywa `git ls-remote`, ktory niczego nie zapisuje w repozytorium, a `git status` uruchamia bez blokady indeksu, zeby nie przeszkadzac agentom pracujacym w repozytoriach. Katalog, ktory nie jest repozytorium Git, nie ma flagi.
+5. Jesli repozytorium ma dodatkowe worktree, karta pokazuje je jako etykiety `worktree: <galaz>`. Klikniecie etykiety otwiera Visual Studio Code w katalogu worktree; liczy sie to jako uruchomienie projektu i ustawia kolor projektu w VS Code.
+6. Strzalka w prawym gornym rogu karty rozwija pelny opis, sciezke i preferowane imiona agentow tylko tego projektu. Rozwiniecie nie jest zapisywane.
+7. Kolor projektu jest widoczny jako akcent karty i pozostaje zapisany w `launch-projects.json`.
+8. Klikniecie dowolnego miejsca na karcie projektu uruchamia Visual Studio Code z odpowiednim folderem w osobnym oknie i chowa launcher do zasobnika.
+9. Klawisze `1`-`9` uruchamiaja aktywny projekt o odpowiadajacym numerze.
+10. Po udanym kliknieciu albo uzyciu numeru `lastLaunched` i `launchCount` w `launch-projects.json` sa aktualizowane automatycznie.
+11. Menu kontekstowe karty pozwala edytowac nazwe, kolor, opis, imiona agentow i tagi.
+12. Rzadziej uzywany projekt mozna odstawic. Przycisk `Odstawione (N)` pod tagami przelacza liste na odstawione projekty, pokazane w tym samym ukladzie kart z pelnym opisem i bez numerow. `Esc` albo ponowne klikniecie wraca do aktywnych.
+13. Odstawiony projekt mozna uruchomic, przywrocic do aktywnych albo usunac calkowicie z rejestru.
+14. Przyciski sortowania w naglowku wybieraja kolejnosc po `launchCount`, dacie `lastLaunched` albo alfabetycznie po nazwie; domyslny tryb to data ostatniego uruchomienia.
+15. Panel tagow po prawej stronie filtruje aktywne i odstawione projekty; przy kilku zaznaczonych tagach wystarczy dopasowanie dowolnego z nich.
+16. Wybrane tagi sa filtrem tymczasowym i nie sa zapisywane.
+17. `Esc`, przycisk `×` i `Alt+F4` chowaja okno do zasobnika. Przy kazdym pokazaniu okna launcher wczytuje rejestr od nowa i odswieza stan Git.
+18. Numer wersji aplikacji jest widoczny pod naglowkiem `Projekty`.
+19. Okno nie ma belki tytulu, ale mozna je przeciagac chwytajac dowolne puste miejsce: naglowek, marginesy, tlo listy albo tlo panelu tagow. Przyciski, suwaki i karty projektow nie przenosza okna.
