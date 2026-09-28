@@ -23,7 +23,16 @@ public enum GitStateKind
 }
 
 /// <summary>Dodatkowy worktree repozytorium, ktory mozna otworzyc w edytorze obok glownego katalogu projektu</summary>
-public sealed record GitWorktree(string Path, string Branch);
+public sealed record GitWorktree(string Path, string Branch)
+{
+    /// <summary>Worktree nie trafia na GitHuba, wiec jego stan to tylko czystosc katalogu roboczego</summary>
+    public bool IsDirty { get; init; }
+
+    /// <summary>Opis zadania z workflow `branch`, a bez niego temat ostatniego commita</summary>
+    public string Description { get; init; } = "";
+
+    public string StateLabel => IsDirty ? "brudne" : "czyste";
+}
 
 /// <summary>Migawka stanu repozytorium projektu: biezaca galaz, czystosc worktree i synchronizacja z remote</summary>
 public sealed record GitRepositoryStatus
@@ -49,6 +58,9 @@ public sealed record GitRepositoryStatus
 
     /// <summary>Liczba lokalnych commitow, ktorych nie ma w remote; znaczace przy `Sync == Ahead`</summary>
     public int AheadCount { get; init; }
+
+    /// <summary>Opis zadania aktywnego workflow `branch` na biezacej galezi; pusty, gdy galaz nie ma takiego zadania</summary>
+    public string TaskDescription { get; init; } = "";
 
     /// <summary>Pozostale worktree repozytorium, bez tego, w ktorym lezy katalog projektu</summary>
     public IReadOnlyList<GitWorktree> Worktrees { get; init; } = [];

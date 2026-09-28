@@ -10,6 +10,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using ProjectLauncher.Core;
 
@@ -19,6 +20,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private const double WindowScreenMargin = 16;
     private const int GitParallelism = 6;
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan RemoteRefreshInterval = TimeSpan.FromMinutes(5);
 
     private readonly ObservableCollection<ProjectItem> _projects = [];
     private Point _dragStartPoint;
@@ -28,6 +31,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _showShelved;
     private bool _closeAllowed;
     private bool _wasHidden;
+    private bool _showTaskDescriptions = true;
+    private bool _refreshRunning;
+    private DateTime _lastRemoteRefresh = DateTime.MinValue;
+    private DateTime _registryWriteTime;
+    private readonly DispatcherTimer _refreshTimer = new() { Interval = RefreshInterval };
 
     /// <summary>Okno zyje w tle z ikona w zasobniku: zamkniecie je chowa, a pokazanie wczytuje swiezy stan</summary>
     public bool IsResident { get; init; }
@@ -57,6 +65,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public string ShelvedButtonText => $"Odstawione ({ShelvedProjects.Count})";
 
+    /// <summary>Pokazuje pod opisem projektu opis zadania programu branch na biezacej galezi</summary>
+    public bool ShowTaskDescriptions
+    {
+        get => _showTaskDescriptions;
+        private set
+        {
+            if (_showTaskDescriptions == value)
+                return;
+
+            _showTaskDescriptions = value;
+            _OnPropertyChanged();
+        }
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public MainWindow()
@@ -66,6 +88,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SourceInitialized += (_, _) => _ApplyWindowHeightLimit();
         LocationChanged += (_, _) => _ApplyWindowHeightLimit();
         DpiChanged += (_, _) => _ApplyWindowHeightLimit();
+
+        // Odswiezanie dziala tylko wtedy, gdy okno jest na ekranie; schowane w zasobniku nie odpytuje repozytoriow.
+        _refreshTimer.Tick += async (_, _) => await _OnRefreshTimerTickAsync();
+        IsVisibleChanged += (_, _) =>
+        {
+            if (IsVisible)
+                _refreshTimer.Start();
+            else
+                _refreshTimer.Stop();
+        };
+
         DataContext = this;
         LoadSettings();
         LoadProjects();
@@ -139,7 +172,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void LoadSettings()
     {
-        _sortMode = ProjectRegistry.LoadSettings().SortMode;
+        var settings = ProjectRegistry.LoadSettings();
+        _sortMode = settings.SortMode;
+        ShowTaskDescriptions = settings.ShowTaskDescriptions;
     }
 
     // WPF nie ma juz przelacznika Details; zachowujemy zapisana wartosc, bo uzywa jej wersja Avalonia.
@@ -147,7 +182,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         var settings = ProjectRegistry.LoadSettings();
         settings.SortMode = _sortMode;
+        settings.ShowTaskDescriptions = ShowTaskDescriptions;
         ProjectRegistry.SaveSettings(settings);
+    }
+
+    /// <summary>Wlacza albo wylacza opisy zadan branch na kartach i zapisuje wybor w ustawieniach</summary>
+    public void SetShowTaskDescriptions(bool show)
+    {
+        ShowTaskDescriptions = show;
+        SaveSettings();
     }
 
     // Okno rosnie pod liczbe projektow (SizeToContent), ale nie wyzej niz uzyteczna wysokosc ekranu;
@@ -202,16 +245,22 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void LoadProjects()
     {
+        // Najpierw odczyt, potem podmiana: nieudany odczyt nie moze zostawic pustej listy.
+        var loaded = ProjectRegistry.LoadProjects();
         _projects.Clear();
-        foreach (var project in ProjectRegistry.LoadProjects())
+        foreach (var project in loaded)
         {
             _projects.Add(project);
         }
+
+        _registryWriteTime = _GetRegistryWriteTime();
     }
 
     private void SaveProjects()
     {
         ProjectRegistry.SaveProjects(_projects);
+        // Wlasny zapis nie jest zmiana z zewnatrz i nie powinien przeladowywac listy przy nastepnym odswiezeniu.
+        _registryWriteTime = _GetRegistryWriteTime();
     }
 
     private void RebuildProjectLists()
@@ -514,17 +563,71 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         Close();
     }
 
-    // Doczytuje stan Git w tle: najpierw szybki stan lokalny wszystkich projektow, potem porownanie z GitHubem.
-    private static async Task _RefreshGitStatusesAsync(IReadOnlyList<ProjectItem> projects)
+    // Co minute, gdy okno jest widoczne: rejestr wczytujemy ponownie tylko po zmianie pliku, stan Git zawsze.
+    private async Task _OnRefreshTimerTickAsync()
     {
-        await _RunLimitedAsync(projects, async project =>
-            project.GitStatus = await GitStatusReader.ReadLocalAsync(project.Path));
-
-        await _RunLimitedAsync(projects, async project =>
+        if (_GetRegistryWriteTime() != _registryWriteTime)
         {
-            if (project.GitStatus is { IsRepository: true } local)
-                project.GitStatus = await GitStatusReader.ReadRemoteAsync(project.Path, local);
-        });
+            try
+            {
+                _ReloadProjects();
+            }
+            catch (Exception exception) when (exception is System.Text.Json.JsonException or IOException)
+            {
+                // Inne narzedzie moze wlasnie zapisywac rejestr; sprobujemy przy nastepnym odswiezeniu.
+                Debug.WriteLine($"Odswiezenie rejestru: {exception.Message}");
+            }
+
+            return;
+        }
+
+        await _RefreshGitStatusesAsync(_projects.ToList());
+    }
+
+    // Doczytuje stan Git w tle: najpierw szybki stan lokalny wszystkich projektow, potem porownanie z GitHubem.
+    // GitHub sprawdzamy rzadziej niz stan lokalny; w miedzyczasie zostaje poprzedni wynik, o ile HEAD sie nie zmienil.
+    private async Task _RefreshGitStatusesAsync(IReadOnlyList<ProjectItem> projects)
+    {
+        if (_refreshRunning)
+            return;
+
+        _refreshRunning = true;
+        try
+        {
+            var checkRemote = DateTime.UtcNow - _lastRemoteRefresh >= RemoteRefreshInterval;
+            await _RunLimitedAsync(projects, async project =>
+                project.GitStatus = _KeepKnownSync(await GitStatusReader.ReadLocalAsync(project.Path), project.GitStatus));
+
+            if (checkRemote)
+                _lastRemoteRefresh = DateTime.UtcNow;
+
+            await _RunLimitedAsync(projects, async project =>
+            {
+                if (project.GitStatus is { IsRepository: true } local && (checkRemote || local.Sync == GitSyncState.Unknown))
+                    project.GitStatus = await GitStatusReader.ReadRemoteAsync(project.Path, local);
+            });
+        }
+        finally
+        {
+            _refreshRunning = false;
+        }
+    }
+
+    // Poprzedni wynik GitHuba jest nadal prawdziwy, jesli lokalnie nie zmienil sie HEAD ani galaz sledzona.
+    private static GitRepositoryStatus _KeepKnownSync(GitRepositoryStatus local, GitRepositoryStatus? previous)
+    {
+        return previous is not null &&
+               previous.HeadSha == local.HeadSha &&
+               previous.Branch == local.Branch &&
+               previous.Upstream == local.Upstream
+            ? local with { Sync = previous.Sync, AheadCount = previous.AheadCount }
+            : local;
+    }
+
+    // Data zapisu rejestru pozwala wykryc zmiane zrobiona przez inne narzedzie.
+    private static DateTime _GetRegistryWriteTime()
+    {
+        return File.GetLastWriteTimeUtc(ProjectLauncherPaths.GetProjectsFilePath());
     }
 
     // Uruchamia operacje dla projektow rownolegle, ale nie wiecej niz kilka procesow git naraz.

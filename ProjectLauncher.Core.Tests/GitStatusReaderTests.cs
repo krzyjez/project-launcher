@@ -184,6 +184,52 @@ public class GitStatusReaderTests
         Assert.Equal("main", Assert.Single(fromLinked.Worktrees).Branch);
     }
 
+    [Fact]
+    public async Task Worktree_has_own_dirty_flag_and_task_description_with_commit_fallback()
+    {
+        using var directory = new TempDirectory();
+        var main = directory.Create("main");
+        var withTask = System.IO.Path.Combine(directory.Path, "with-task");
+        var withoutTask = System.IO.Path.Combine(directory.Path, "without-task");
+        Git(main, "init", "--initial-branch=main");
+        Commit(main, "a.txt");
+        Git(main, "worktree", "add", "-b", "analiza", withTask);
+        Git(main, "worktree", "add", "-b", "poprawki", withoutTask);
+        Commit(withoutTask, "zażółć.txt");
+        WriteBranchState(withTask, "analiza", "Analiza rozmów i kategoryzacja");
+        File.WriteAllText(System.IO.Path.Combine(withTask, "roboczy.txt"), "zmiana");
+
+        var status = await GitStatusReader.ReadLocalAsync(main);
+
+        var task = status.Worktrees.Single(worktree => worktree.Branch == "analiza");
+        var fallback = status.Worktrees.Single(worktree => worktree.Branch == "poprawki");
+        Assert.True(task.IsDirty);
+        Assert.Equal("Analiza rozmów i kategoryzacja", task.Description);
+        Assert.False(fallback.IsDirty);
+        Assert.Equal("zażółć.txt", fallback.Description);
+    }
+
+    [Fact]
+    public void Branch_task_description_is_ignored_for_other_branch_or_broken_file()
+    {
+        using var directory = new TempDirectory();
+        WriteBranchState(directory.Path, "two-columns", "Nowy layout");
+
+        Assert.Equal("Nowy layout", GitStatusReader.ReadBranchTaskDescription(directory.Path, "two-columns"));
+        Assert.Equal("", GitStatusReader.ReadBranchTaskDescription(directory.Path, "main"));
+
+        File.WriteAllText(System.IO.Path.Combine(directory.Path, ".workai", "branch-state.json"), "{ niepoprawny");
+        Assert.Equal("", GitStatusReader.ReadBranchTaskDescription(directory.Path, "two-columns"));
+    }
+
+    // Minimalny stan programu branch: tylko pola, ktore czyta launcher.
+    private static void WriteBranchState(string worktreePath, string branch, string description)
+    {
+        var workai = Directory.CreateDirectory(System.IO.Path.Combine(worktreePath, ".workai")).FullName;
+        var json = System.Text.Json.JsonSerializer.Serialize(new { BranchName = branch, StartDescription = description });
+        File.WriteAllText(System.IO.Path.Combine(workai, "branch-state.json"), json);
+    }
+
     private static GitRepositoryStatus ProjectStatus(string output) => GitStatusReader.ParseStatus(output);
 
     private static async Task<GitSyncState> ReadSyncAsync(string repositoryPath)

@@ -76,7 +76,7 @@ Przyklad:
 
 ## Uruchamianie
 
-Launcher dziala w tle z ikona rakiety w zasobniku systemowym. Klikniecie ikony pokazuje okno. Menu ikony zawiera `Pokaz projekty`, `Uruchamiaj przy starcie Windows` oraz `Zakoncz`; tylko `Zakoncz` naprawde zamyka program.
+Launcher dziala w tle z ikona rakiety w zasobniku systemowym. Klikniecie ikony pokazuje okno. Menu ikony zawiera `Pokaz projekty`, `Pokazuj opisy zadan branch`, `Uruchamiaj przy starcie Windows` oraz `Zakoncz`; tylko `Zakoncz` naprawde zamyka program.
 
 Dziala tylko jedna instancja launchera. Kolejne uruchomienie exe, na przyklad ze skrotu, nie otwiera drugiej kopii, tylko pokazuje okno dzialajacej instancji.
 
@@ -98,25 +98,27 @@ Alt + Spacja -> Projekty -> Enter
 
 ## Zachowanie
 
-1. Karty aktywnych projektow ukladaja sie wierszami w dwie kolumny (1 i 2 w pierwszym rzedzie, 3 i 4 w drugim). Karta pokazuje numer, nazwe, jedna linie opisu oraz licznik uruchomien i date ostatniego uruchomienia.
+1. Karty aktywnych projektow ukladaja sie wierszami w dwie kolumny (1 i 2 w pierwszym rzedzie, 3 i 4 w drugim). Karta pokazuje numer, nazwe, pelny opis oraz licznik uruchomien i date ostatniego uruchomienia. Kolumny sa niezalezne: wysokosc karty nie zalezy od karty obok.
 2. Wysokosc okna dopasowuje sie do liczby rzedow kart, ale nie przekracza uzytecznej wysokosci ekranu; lista przewija sie dopiero wtedy, gdy karty nie mieszcza sie na monitorze. Limit jest liczony dla monitora, na ktorym stoi okno, i przelicza sie automatycznie po przeniesieniu okna na inny monitor.
 3. Karta repozytorium Git pokazuje biezaca galaz i flage stanu:
    - pomaranczowa `brudne` - niezacommitowane albo nowe pliki;
    - zielona `czyste` - galaz jest taka sama jak na GitHubie;
    - zolta `czyste ↑N` - N lokalnych commitow niewypchnietych na GitHuba; zolte sa tez `brak na GitHubie`, `nowsze na GitHubie`, `bez GitHuba` i `GitHub niedostepny`.
 4. Stan lokalny pojawia sie od razu, a porownanie z GitHubem chwile pozniej. Launcher uzywa `git ls-remote`, ktory niczego nie zapisuje w repozytorium, a `git status` uruchamia bez blokady indeksu, zeby nie przeszkadzac agentom pracujacym w repozytoriach. Katalog, ktory nie jest repozytorium Git, nie ma flagi.
-5. Jesli repozytorium ma dodatkowe worktree, karta pokazuje je jako etykiety `worktree: <galaz>`. Klikniecie etykiety otwiera Visual Studio Code w katalogu worktree; liczy sie to jako uruchomienie projektu i ustawia kolor projektu w VS Code.
-6. Strzalka w prawym gornym rogu karty rozwija pelny opis, sciezke i preferowane imiona agentow tylko tego projektu. Rozwiniecie nie jest zapisywane.
-7. Kolor projektu jest widoczny jako akcent karty i pozostaje zapisany w `launch-projects.json`.
-8. Klikniecie dowolnego miejsca na karcie projektu uruchamia Visual Studio Code z odpowiednim folderem w osobnym oknie i chowa launcher do zasobnika.
-9. Klawisze `1`-`9` uruchamiaja aktywny projekt o odpowiadajacym numerze.
-10. Po udanym kliknieciu albo uzyciu numeru `lastLaunched` i `launchCount` w `launch-projects.json` sa aktualizowane automatycznie.
-11. Menu kontekstowe karty pozwala edytowac nazwe, kolor, opis, imiona agentow i tagi.
-12. Rzadziej uzywany projekt mozna odstawic. Przycisk `Odstawione (N)` pod tagami przelacza liste na odstawione projekty, pokazane w tym samym ukladzie kart z pelnym opisem i bez numerow. `Esc` albo ponowne klikniecie wraca do aktywnych.
-13. Odstawiony projekt mozna uruchomic, przywrocic do aktywnych albo usunac calkowicie z rejestru.
-14. Przyciski sortowania w naglowku wybieraja kolejnosc po `launchCount`, dacie `lastLaunched` albo alfabetycznie po nazwie; domyslny tryb to data ostatniego uruchomienia.
-15. Panel tagow po prawej stronie filtruje aktywne i odstawione projekty; przy kilku zaznaczonych tagach wystarczy dopasowanie dowolnego z nich.
-16. Wybrane tagi sa filtrem tymczasowym i nie sa zapisywane.
-17. `Esc`, przycisk `×` i `Alt+F4` chowaja okno do zasobnika. Przy kazdym pokazaniu okna launcher wczytuje rejestr od nowa i odswieza stan Git.
-18. Numer wersji aplikacji jest widoczny pod naglowkiem `Projekty`.
-19. Okno nie ma belki tytulu, ale mozna je przeciagac chwytajac dowolne puste miejsce: naglowek, marginesy, tlo listy albo tlo panelu tagow. Przyciski, suwaki i karty projektow nie przenosza okna.
+5. Jesli repozytorium ma dodatkowe worktree, karta pokazuje kazdy z nich jako osobny wiersz: galaz, flage `czyste`/`brudne` (worktree nie trafia na GitHuba, wiec nie ma porownania z remote) i opis zadania z `.workai\branch-state.json` programu `branch`, a bez niego temat ostatniego commita. Klikniecie wiersza otwiera Visual Studio Code w katalogu worktree; liczy sie to jako uruchomienie projektu i ustawia kolor projektu w VS Code.
+6. Jesli biezaca galaz projektu ma aktywne zadanie programu `branch`, pod opisem projektu widac `zadanie: <opis>`. Opisy zadan mozna wylaczyc w menu ikony w zasobniku (`Pokazuj opisy zadan branch`); wybor jest zapisywany w ustawieniach.
+7. Strzalka w prawym gornym rogu karty rozwija sciezke i preferowane imiona agentow tylko tego projektu. Rozwiniecie nie jest zapisywane.
+8. Kolor projektu jest widoczny jako akcent karty i pozostaje zapisany w `launch-projects.json`.
+9. Klikniecie dowolnego miejsca na karcie projektu uruchamia Visual Studio Code z odpowiednim folderem w osobnym oknie i chowa launcher do zasobnika.
+10. Klawisze `1`-`9` uruchamiaja aktywny projekt o odpowiadajacym numerze.
+11. Po udanym kliknieciu albo uzyciu numeru `lastLaunched` i `launchCount` w `launch-projects.json` sa aktualizowane automatycznie.
+12. Menu kontekstowe karty pozwala edytowac nazwe, kolor, opis, imiona agentow i tagi.
+13. Rzadziej uzywany projekt mozna odstawic. Przycisk `Odstawione (N)` pod tagami przelacza liste na odstawione projekty, pokazane w tym samym ukladzie kart z pelnym opisem i bez numerow. `Esc` albo ponowne klikniecie wraca do aktywnych.
+14. Odstawiony projekt mozna uruchomic, przywrocic do aktywnych albo usunac calkowicie z rejestru.
+15. Przyciski sortowania w naglowku wybieraja kolejnosc po `launchCount`, dacie `lastLaunched` albo alfabetycznie po nazwie; domyslny tryb to data ostatniego uruchomienia.
+16. Panel tagow po prawej stronie filtruje aktywne i odstawione projekty; przy kilku zaznaczonych tagach wystarczy dopasowanie dowolnego z nich.
+17. Wybrane tagi sa filtrem tymczasowym i nie sa zapisywane.
+18. `Esc`, przycisk `×` i `Alt+F4` chowaja okno do zasobnika. Przy kazdym pokazaniu okna launcher wczytuje rejestr od nowa i odswieza stan Git.
+19. Gdy okno jest widoczne, launcher co minute odswieza stan lokalny repozytoriow i worktree, a stan GitHuba co 5 minut. Rejestr wczytuje ponownie tylko wtedy, gdy plik zmienilo inne narzedzie; rozwiniete karty i widok odstawionych zostaja bez zmian. Schowany w zasobniku launcher niczego nie odpytuje.
+20. Numer wersji aplikacji jest widoczny pod naglowkiem `Projekty`.
+21. Okno nie ma belki tytulu, ale mozna je przeciagac chwytajac dowolne puste miejsce: naglowek, marginesy, tlo listy albo tlo panelu tagow. Przyciski, suwaki i karty projektow nie przenosza okna.

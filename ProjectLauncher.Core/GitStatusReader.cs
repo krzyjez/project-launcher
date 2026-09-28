@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace ProjectLauncher.Core;
 
@@ -21,11 +22,66 @@ public static class GitStatusReader
 
         var status = ParseStatus(result.Output);
         var topLevel = await _RunGitAsync(repositoryPath, ["rev-parse", "--show-toplevel"], LocalTimeout, cancellationToken);
-        var worktrees = await _RunGitAsync(repositoryPath, ["worktree", "list", "--porcelain"], LocalTimeout, cancellationToken);
-        if (topLevel.ExitCode != 0 || worktrees.ExitCode != 0)
+        if (topLevel.ExitCode != 0)
             return status;
 
-        return status with { Worktrees = ParseWorktrees(worktrees.Output, topLevel.Output.Trim()) };
+        var topLevelPath = topLevel.Output.Trim();
+        status = status with { TaskDescription = ReadBranchTaskDescription(topLevelPath, status.Branch) };
+
+        var worktrees = await _RunGitAsync(repositoryPath, ["worktree", "list", "--porcelain"], LocalTimeout, cancellationToken);
+        if (worktrees.ExitCode != 0)
+            return status;
+
+        var details = await Task.WhenAll(ParseWorktrees(worktrees.Output, topLevelPath)
+            .Select(worktree => _ReadWorktreeDetailsAsync(worktree, cancellationToken)));
+
+        return status with { Worktrees = details };
+    }
+
+    /// <summary>Czyta opis zadania z `.workai/branch-state.json` programu `branch`; pusty, gdy plik nie istnieje albo dotyczy innej galezi</summary>
+    public static string ReadBranchTaskDescription(string worktreePath, string branch)
+    {
+        var statePath = System.IO.Path.Combine(worktreePath, ".workai", "branch-state.json");
+        if (!File.Exists(statePath))
+            return "";
+
+        try
+        {
+            // Program branch moze w tej chwili zapisywac plik, wiec nie blokujemy go przy odczycie.
+            using var stream = new FileStream(statePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var document = JsonDocument.Parse(stream);
+            var root = document.RootElement;
+
+            // Stan po zamknietym workflow albo z innej galezi nie opisuje tego, co jest teraz w katalogu.
+            if (!root.TryGetProperty("BranchName", out var branchName) || branchName.GetString() != branch)
+                return "";
+
+            return root.TryGetProperty("StartDescription", out var description)
+                ? description.GetString()?.Trim() ?? ""
+                : "";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
+        {
+            return "";
+        }
+    }
+
+    // Worktree ma wlasny stan czystosci i wlasne zadanie; bez zadania pokazujemy temat ostatniego commita.
+    private static async Task<GitWorktree> _ReadWorktreeDetailsAsync(GitWorktree worktree, CancellationToken cancellationToken)
+    {
+        var status = await _RunGitAsync(worktree.Path, ["status", "--porcelain"], LocalTimeout, cancellationToken);
+        var description = ReadBranchTaskDescription(worktree.Path, worktree.Branch);
+        if (description.Length == 0)
+        {
+            var lastCommit = await _RunGitAsync(worktree.Path, ["log", "-1", "--format=%s"], LocalTimeout, cancellationToken);
+            description = lastCommit.ExitCode == 0 ? lastCommit.Output.Trim() : "";
+        }
+
+        return worktree with
+        {
+            IsDirty = status.ExitCode == 0 && status.Output.Trim().Length > 0,
+            Description = description
+        };
     }
 
     /// <summary>Parsuje `git worktree list --porcelain`, pomijajac biezacy worktree, repozytoria bare i usuniete katalogi</summary>
@@ -213,7 +269,10 @@ public static class GitStatusReader
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            // Git wypisuje tematy commitow i sciezki w UTF-8; domyslna strona kodowa Windows psulaby polskie znaki.
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8
         };
 
         startInfo.ArgumentList.Add("-C");

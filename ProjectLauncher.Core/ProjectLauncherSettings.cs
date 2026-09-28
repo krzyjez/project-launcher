@@ -10,4 +10,8 @@ public sealed class ProjectLauncherSettings
 
     [JsonPropertyName("showDetails")]
     public bool ShowDetails { get; set; }
+
+    // Opis zadania programu branch pod opisem projektu; domyslnie wlaczony, wylaczany z menu ikony w zasobniku.
+    [JsonPropertyName("showTaskDescriptions")]
+    public bool ShowTaskDescriptions { get; set; } = true;
 }

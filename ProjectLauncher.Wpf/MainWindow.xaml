@@ -272,10 +272,11 @@
             </Setter>
         </Style>
 
+        <!-- Wiersz worktree wewnatrz karty projektu: cala szerokosc karty, obramowanie podswietla sie po najechaniu -->
         <Style x:Key="WorktreeButtonStyle" TargetType="{x:Type Button}">
             <Setter Property="Foreground" Value="{StaticResource TextSubtle}" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="Margin" Value="0,6,0,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -283,9 +284,9 @@
                         <Border x:Name="WorktreeBorder"
                                 Background="#181A20"
                                 BorderBrush="#383A43"
-                                BorderThickness="1"
-                                CornerRadius="6"
-                                Padding="7,1">
+                                BorderThickness="1.5"
+                                CornerRadius="8"
+                                Padding="10,6">
                             <ContentPresenter />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -645,6 +646,26 @@
                                                TextWrapping="Wrap" />
                                 </DockPanel>
 
+                                <!-- Zadanie workflow branch na biezacej galezi; mozna je wylaczyc w menu ikony w zasobniku -->
+                                <TextBlock Foreground="#9DB8D5"
+                                           FontSize="12"
+                                           FontStyle="Italic"
+                                           TextWrapping="Wrap"
+                                           Margin="0,5,0,0">
+                                    <Run Text="zadanie:" FontStyle="Normal" FontWeight="SemiBold" />
+                                    <Run Text="{Binding GitStatus.TaskDescription, Mode=OneWay}" />
+                                    <TextBlock.Style>
+                                        <Style TargetType="{x:Type TextBlock}">
+                                            <Setter Property="Visibility" Value="{Binding GitStatus.TaskDescription, Converter={StaticResource EmptyTextToVisibility}}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.ShowTaskDescriptions, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="False">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
                                 <TextBlock Text="{Binding Path}"
                                            Style="{StaticResource CardDetailStyle}"
                                            Foreground="{StaticResource TextMuted}"
@@ -656,9 +677,10 @@
                                            FontWeight="SemiBold"
                                            Margin="0,3,0,0" />
 
-                                <!-- Dodatkowe worktree repozytorium; klikniecie otwiera VS Code w katalogu worktree -->
+                                <!-- Dodatkowe worktree repozytorium jako wiersze z galezia, czystoscia i opisem zadania;
+                                     klikniecie wiersza otwiera VS Code w katalogu worktree -->
                                 <ItemsControl ItemsSource="{Binding GitStatus.Worktrees}"
-                                              Margin="0,6,0,0">
+                                              Margin="0,4,0,0">
                                     <ItemsControl.Style>
                                         <Style TargetType="{x:Type ItemsControl}">
                                             <Style.Triggers>
@@ -671,20 +693,43 @@
                                             </Style.Triggers>
                                         </Style>
                                     </ItemsControl.Style>
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel Orientation="Horizontal" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Button Style="{StaticResource WorktreeButtonStyle}"
                                                     Click="_WorktreeButton_Click"
                                                     ToolTip="{Binding Path}">
-                                                <TextBlock>
-                                                    <Run Text="worktree:" Foreground="{StaticResource TextMuted}" />
-                                                    <Run Text="{Binding Branch, Mode=OneWay}" />
-                                                </TextBlock>
+                                                <StackPanel>
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Right"
+                                                                   FontSize="12"
+                                                                   FontWeight="Bold"
+                                                                   Margin="10,0,0,0">
+                                                            <Run Text="● " />
+                                                            <Run Text="{Binding StateLabel, Mode=OneWay}" />
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="{x:Type TextBlock}">
+                                                                    <Setter Property="Foreground" Value="#2ECC71" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsDirty}" Value="True">
+                                                                            <Setter Property="Foreground" Value="#FF9F1A" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                        <TextBlock FontSize="13"
+                                                                   TextTrimming="CharacterEllipsis">
+                                                            <Run Text="worktree " Foreground="{StaticResource TextMuted}" />
+                                                            <Run Text="{Binding Branch, Mode=OneWay}" FontWeight="SemiBold" Foreground="#E4DDCB" />
+                                                        </TextBlock>
+                                                    </DockPanel>
+                                                    <TextBlock Text="{Binding Description}"
+                                                               Visibility="{Binding Description, Converter={StaticResource EmptyTextToVisibility}}"
+                                                               Foreground="{StaticResource TextSubtle}"
+                                                               FontSize="12"
+                                                               TextWrapping="Wrap"
+                                                               Margin="0,3,0,0" />
+                                                </StackPanel>
                                             </Button>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
