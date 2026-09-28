@@ -68,11 +68,7 @@ public partial class App : Application
         var mainWindow = new MainWindow { IsResident = true };
         MainWindow = mainWindow;
 
-        _trayIcon = new TrayIcon(
-            mainWindow.ShowLauncher,
-            () => _ExitLauncher(mainWindow),
-            mainWindow.ShowTaskDescriptions,
-            mainWindow.SetShowTaskDescriptions);
+        _trayIcon = new TrayIcon(mainWindow.ShowLauncher, () => _ExitLauncher(mainWindow));
         _showWait = ThreadPool.RegisterWaitForSingleObject(
             _showEvent,
             (_, _) => Dispatcher.BeginInvoke(mainWindow.ShowLauncher),

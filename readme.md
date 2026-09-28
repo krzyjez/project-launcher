@@ -76,7 +76,7 @@ Przyklad:
 
 ## Uruchamianie
 
-Launcher dziala w tle z ikona rakiety w zasobniku systemowym. Klikniecie ikony pokazuje okno. Menu ikony zawiera `Pokaz projekty`, `Pokazuj opisy zadan branch`, `Uruchamiaj przy starcie Windows` oraz `Zakoncz`; tylko `Zakoncz` naprawde zamyka program.
+Launcher dziala w tle z ikona rakiety w zasobniku systemowym. Klikniecie ikony pokazuje okno. Menu ikony zawiera `Pokaz projekty`, `Uruchamiaj przy starcie Windows` oraz `Zakoncz`; tylko `Zakoncz` naprawde zamyka program.
 
 Dziala tylko jedna instancja launchera. Kolejne uruchomienie exe, na przyklad ze skrotu, nie otwiera drugiej kopii, tylko pokazuje okno dzialajacej instancji.
 
@@ -105,8 +105,8 @@ Alt + Spacja -> Projekty -> Enter
    - zielona `czyste` - galaz jest taka sama jak na GitHubie;
    - zolta `czyste ↑N` - N lokalnych commitow niewypchnietych na GitHuba; zolte sa tez `brak na GitHubie`, `nowsze na GitHubie`, `bez GitHuba` i `GitHub niedostepny`.
 4. Stan lokalny pojawia sie od razu, a porownanie z GitHubem chwile pozniej. Launcher uzywa `git ls-remote`, ktory niczego nie zapisuje w repozytorium, a `git status` uruchamia bez blokady indeksu, zeby nie przeszkadzac agentom pracujacym w repozytoriach. Katalog, ktory nie jest repozytorium Git, nie ma flagi.
-5. Jesli repozytorium ma dodatkowe worktree, karta pokazuje kazdy z nich jako osobny wiersz: galaz, flage `czyste`/`brudne` (worktree nie trafia na GitHuba, wiec nie ma porownania z remote) i opis zadania z `.workai\branch-state.json` programu `branch`, a bez niego temat ostatniego commita. Klikniecie wiersza otwiera Visual Studio Code w katalogu worktree; liczy sie to jako uruchomienie projektu i ustawia kolor projektu w VS Code.
-6. Jesli biezaca galaz projektu ma aktywne zadanie programu `branch`, pod opisem projektu widac `zadanie: <opis>`. Opisy zadan mozna wylaczyc w menu ikony w zasobniku (`Pokazuj opisy zadan branch`); wybor jest zapisywany w ustawieniach.
+5. Jesli repozytorium ma dodatkowe worktree, karta pokazuje kazdy z nich jako osobny wiersz z galezia i flaga `czyste`/`brudne` (worktree nie trafia na GitHuba, wiec nie ma porownania z remote). Dymek nad nazwa galezi worktree pokazuje opis zadania z `.workai\branch-state.json` programu `branch`, a bez niego temat ostatniego commita. Klikniecie wiersza otwiera Visual Studio Code w katalogu worktree; liczy sie to jako uruchomienie projektu i ustawia kolor projektu w VS Code.
+6. Jesli biezaca galaz projektu ma aktywne zadanie programu `branch`, jego opis pokazuje dymek nad nazwa galezi na karcie.
 7. Strzalka w prawym gornym rogu karty rozwija sciezke i preferowane imiona agentow tylko tego projektu. Rozwiniecie nie jest zapisywane.
 8. Kolor projektu jest widoczny jako akcent karty i pozostaje zapisany w `launch-projects.json`.
 9. Klikniecie dowolnego miejsca na karcie projektu uruchamia Visual Studio Code z odpowiednim folderem w osobnym oknie i chowa launcher do zasobnika.

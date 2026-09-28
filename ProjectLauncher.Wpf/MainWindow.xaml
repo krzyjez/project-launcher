@@ -272,6 +272,29 @@
             </Setter>
         </Style>
 
+        <!-- Kazdy element dostaje wlasna instancje dymka; wspolny obiekt ToolTip nie moze nalezec do kilku kart naraz -->
+        <ToolTip x:Key="BranchDescriptionToolTip"
+                 x:Shared="False"
+                 Style="{StaticResource ProjectDescriptionToolTipStyle}">
+            <TextBlock Text="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource AncestorType={x:Type ToolTip}}}"
+                       TextWrapping="Wrap" />
+        </ToolTip>
+
+        <!-- Nosnik dymka z opisem galezi: opis przychodzi w Tag, a pusty opis nie pokazuje pustego dymka -->
+        <Style x:Key="BranchDescriptionHostStyle" TargetType="{x:Type Border}">
+            <Setter Property="ToolTipService.InitialShowDelay" Value="250" />
+            <Setter Property="ToolTipService.ShowDuration" Value="60000" />
+            <Setter Property="ToolTip" Value="{StaticResource BranchDescriptionToolTip}" />
+            <Style.Triggers>
+                <Trigger Property="Tag" Value="">
+                    <Setter Property="ToolTip" Value="{x:Null}" />
+                </Trigger>
+                <Trigger Property="Tag" Value="{x:Null}">
+                    <Setter Property="ToolTip" Value="{x:Null}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- Wiersz worktree wewnatrz karty projektu: cala szerokosc karty, obramowanie podswietla sie po najechaniu -->
         <Style x:Key="WorktreeButtonStyle" TargetType="{x:Type Button}">
             <Setter Property="Foreground" Value="{StaticResource TextSubtle}" />
@@ -587,9 +610,12 @@
                                             </Style>
                                         </StackPanel.Style>
 
+                                        <!-- Dymek z opisem zadania branch biezacej galezi -->
                                         <Border Background="#262933"
                                                 CornerRadius="6"
-                                                Padding="8,2">
+                                                Padding="8,2"
+                                                Style="{StaticResource BranchDescriptionHostStyle}"
+                                                Tag="{Binding GitStatus.TaskDescription}">
                                             <TextBlock Text="{Binding GitStatus.Branch}"
                                                        Foreground="#E4DDCB"
                                                        FontSize="13"
@@ -646,26 +672,6 @@
                                                TextWrapping="Wrap" />
                                 </DockPanel>
 
-                                <!-- Zadanie workflow branch na biezacej galezi; mozna je wylaczyc w menu ikony w zasobniku -->
-                                <TextBlock Foreground="#9DB8D5"
-                                           FontSize="12"
-                                           FontStyle="Italic"
-                                           TextWrapping="Wrap"
-                                           Margin="0,5,0,0">
-                                    <Run Text="zadanie:" FontStyle="Normal" FontWeight="SemiBold" />
-                                    <Run Text="{Binding GitStatus.TaskDescription, Mode=OneWay}" />
-                                    <TextBlock.Style>
-                                        <Style TargetType="{x:Type TextBlock}">
-                                            <Setter Property="Visibility" Value="{Binding GitStatus.TaskDescription, Converter={StaticResource EmptyTextToVisibility}}" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding DataContext.ShowTaskDescriptions, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="False">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-
                                 <TextBlock Text="{Binding Path}"
                                            Style="{StaticResource CardDetailStyle}"
                                            Foreground="{StaticResource TextMuted}"
@@ -717,18 +723,22 @@
                                                                 </Style>
                                                             </TextBlock.Style>
                                                         </TextBlock>
-                                                        <TextBlock FontSize="13"
-                                                                   TextTrimming="CharacterEllipsis">
-                                                            <Run Text="worktree " Foreground="{StaticResource TextMuted}" />
-                                                            <Run Text="{Binding Branch, Mode=OneWay}" FontWeight="SemiBold" Foreground="#E4DDCB" />
-                                                        </TextBlock>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="worktree "
+                                                                       Foreground="{StaticResource TextMuted}"
+                                                                       FontSize="13" />
+                                                            <!-- Dymek z opisem zadania worktree albo tematem ostatniego commita -->
+                                                            <Border Style="{StaticResource BranchDescriptionHostStyle}"
+                                                                    Tag="{Binding Description}"
+                                                                    Background="Transparent">
+                                                                <TextBlock Text="{Binding Branch}"
+                                                                           FontSize="13"
+                                                                           FontWeight="SemiBold"
+                                                                           Foreground="#E4DDCB"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                            </Border>
+                                                        </StackPanel>
                                                     </DockPanel>
-                                                    <TextBlock Text="{Binding Description}"
-                                                               Visibility="{Binding Description, Converter={StaticResource EmptyTextToVisibility}}"
-                                                               Foreground="{StaticResource TextSubtle}"
-                                                               FontSize="12"
-                                                               TextWrapping="Wrap"
-                                                               Margin="0,3,0,0" />
                                                 </StackPanel>
                                             </Button>
                                         </DataTemplate>

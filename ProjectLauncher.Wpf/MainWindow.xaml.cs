@@ -31,7 +31,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _showShelved;
     private bool _closeAllowed;
     private bool _wasHidden;
-    private bool _showTaskDescriptions = true;
     private bool _refreshRunning;
     private DateTime _lastRemoteRefresh = DateTime.MinValue;
     private DateTime _registryWriteTime;
@@ -64,20 +63,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ObservableCollection<ProjectItem> VisibleProjects => ShowShelved ? ShelvedProjects : ActiveProjects;
 
     public string ShelvedButtonText => $"Odstawione ({ShelvedProjects.Count})";
-
-    /// <summary>Pokazuje pod opisem projektu opis zadania programu branch na biezacej galezi</summary>
-    public bool ShowTaskDescriptions
-    {
-        get => _showTaskDescriptions;
-        private set
-        {
-            if (_showTaskDescriptions == value)
-                return;
-
-            _showTaskDescriptions = value;
-            _OnPropertyChanged();
-        }
-    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -172,9 +157,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void LoadSettings()
     {
-        var settings = ProjectRegistry.LoadSettings();
-        _sortMode = settings.SortMode;
-        ShowTaskDescriptions = settings.ShowTaskDescriptions;
+        _sortMode = ProjectRegistry.LoadSettings().SortMode;
     }
 
     // WPF nie ma juz przelacznika Details; zachowujemy zapisana wartosc, bo uzywa jej wersja Avalonia.
@@ -182,15 +165,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         var settings = ProjectRegistry.LoadSettings();
         settings.SortMode = _sortMode;
-        settings.ShowTaskDescriptions = ShowTaskDescriptions;
         ProjectRegistry.SaveSettings(settings);
-    }
-
-    /// <summary>Wlacza albo wylacza opisy zadan branch na kartach i zapisuje wybor w ustawieniach</summary>
-    public void SetShowTaskDescriptions(bool show)
-    {
-        ShowTaskDescriptions = show;
-        SaveSettings();
     }
 
     // Okno rosnie pod liczbe projektow (SizeToContent), ale nie wyzej niz uzyteczna wysokosc ekranu;

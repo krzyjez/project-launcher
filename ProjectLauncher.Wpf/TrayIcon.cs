@@ -9,15 +9,8 @@ internal sealed class TrayIcon : IDisposable
     private readonly NotifyIcon _notifyIcon;
 
     /// <summary>Tworzy widoczna ikone; akcje sa wywolywane w watku UI, bo NotifyIcon dziala na petli komunikatow WPF</summary>
-    public TrayIcon(Action showLauncher, Action exitLauncher, bool showTaskDescriptions, Action<bool> setShowTaskDescriptions)
+    public TrayIcon(Action showLauncher, Action exitLauncher)
     {
-        var taskDescriptionsItem = new ToolStripMenuItem("Pokazuj opisy zadan branch")
-        {
-            Checked = showTaskDescriptions,
-            CheckOnClick = true
-        };
-        taskDescriptionsItem.CheckedChanged += (_, _) => setShowTaskDescriptions(taskDescriptionsItem.Checked);
-
         var autostartItem = new ToolStripMenuItem("Uruchamiaj przy starcie Windows")
         {
             Checked = AutostartRegistration.IsEnabled(),
@@ -27,7 +20,6 @@ internal sealed class TrayIcon : IDisposable
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Pokaz projekty", null, (_, _) => showLauncher());
-        menu.Items.Add(taskDescriptionsItem);
         menu.Items.Add(autostartItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Zakoncz", null, (_, _) => exitLauncher());
