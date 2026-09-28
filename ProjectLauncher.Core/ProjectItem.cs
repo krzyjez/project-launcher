@@ -37,6 +37,7 @@ public sealed class ProjectItem : INotifyPropertyChanged
     private int _launchCount;
     private bool _shelved;
     private bool? _legacyHidden;
+    private GitRepositoryStatus? _gitStatus;
 
     [JsonIgnore]
     public int Number
@@ -151,6 +152,14 @@ public sealed class ProjectItem : INotifyPropertyChanged
     {
         get => _legacyHidden;
         set => _legacyHidden = value;
+    }
+
+    // Stan Git jest odczytywany przy kazdym pokazaniu listy, wiec nie trafia do rejestru.
+    [JsonIgnore]
+    public GitRepositoryStatus? GitStatus
+    {
+        get => _gitStatus;
+        set => SetField(ref _gitStatus, value);
     }
 
     [JsonIgnore]

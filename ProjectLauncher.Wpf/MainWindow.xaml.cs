@@ -18,6 +18,9 @@ namespace ProjectLauncher.Wpf;
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private const double WindowScreenMargin = 16;
+    // Miejsce na pionowy suwak; rezerwujemy je zawsze, zeby karty nie przeskakiwaly, gdy suwak sie pojawi.
+    private const double ScrollBarReserve = 17;
+    private const int GitParallelism = 6;
 
     private readonly ObservableCollection<ProjectItem> _projects = [];
     private Point _dragStartPoint;
@@ -25,6 +28,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private string? _screenshotPath;
     private ProjectSortMode _sortMode = ProjectSortMode.LastLaunched;
     private bool _showDetails;
+    private double _cardWidth = double.NaN;
 
     public ObservableCollection<ProjectItem> ActiveProjects { get; } = [];
     public ObservableCollection<ProjectItem> ShelvedProjects { get; } = [];
@@ -48,6 +52,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public Visibility ProjectDetailsVisibility => ShowDetails
         ? Visibility.Visible
         : Visibility.Collapsed;
+
+    /// <summary>Szerokosc jednej karty w dwukolumnowej liscie aktywnych projektow</summary>
+    public double CardWidth
+    {
+        get => _cardWidth;
+        private set
+        {
+            if (_cardWidth.Equals(value))
+                return;
+
+            _cardWidth = value;
+            _OnPropertyChanged();
+        }
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -297,6 +315,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         RebuildTagFilters();
         RebuildProjectLists();
         SaveProjects();
+        _ = _RefreshGitStatusesAsync([project]);
     }
 
     private ProjectItem CreateProjectFromPath(string projectPath)
@@ -422,14 +441,60 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        var gitRefresh = _RefreshGitStatusesAsync(_projects.ToList());
         if (string.IsNullOrWhiteSpace(_screenshotPath))
         {
             return;
         }
 
+        // Zrzut diagnostyczny ma pokazywac karty z juz odczytanym stanem Git.
+        await gitRefresh;
         await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         WindowScreenshot.SaveToPng(this, _screenshotPath);
         Close();
+    }
+
+    // Dzieli szerokosc listy na dwie kolumny kart.
+    private void _ProjectsList_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (e.WidthChanged && ProjectsList.ActualWidth > ScrollBarReserve)
+            CardWidth = Math.Floor((ProjectsList.ActualWidth - ScrollBarReserve) / 2);
+    }
+
+    // Doczytuje stan Git w tle: najpierw szybki stan lokalny wszystkich projektow, potem porownanie z GitHubem.
+    private static async Task _RefreshGitStatusesAsync(IReadOnlyList<ProjectItem> projects)
+    {
+        await _RunLimitedAsync(projects, async project =>
+            project.GitStatus = await GitStatusReader.ReadLocalAsync(project.Path));
+
+        await _RunLimitedAsync(projects, async project =>
+        {
+            if (project.GitStatus is { IsRepository: true } local)
+                project.GitStatus = await GitStatusReader.ReadRemoteAsync(project.Path, local);
+        });
+    }
+
+    // Uruchamia operacje dla projektow rownolegle, ale nie wiecej niz kilka procesow git naraz.
+    private static async Task _RunLimitedAsync(IReadOnlyList<ProjectItem> projects, Func<ProjectItem, Task> action)
+    {
+        using var limiter = new SemaphoreSlim(GitParallelism);
+        await Task.WhenAll(projects.Select(async project =>
+        {
+            await limiter.WaitAsync();
+            try
+            {
+                await action(project);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                // Stan Git jest tylko informacja dodatkowa: blad jednego repozytorium nie moze zatrzymac launchera.
+                Debug.WriteLine($"Stan Git dla {project.Path}: {exception.Message}");
+            }
+            finally
+            {
+                limiter.Release();
+            }
+        }));
     }
 
     private static int? KeyToNumber(Key key)

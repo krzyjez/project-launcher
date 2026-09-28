@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:ProjectLauncher.Wpf"
         mc:Ignorable="d"
         Title="Projekty"
-        Width="930"
+        Width="1240"
         MinWidth="800"
         MinHeight="360"
         SizeToContent="Height"
@@ -197,7 +197,7 @@
         <Style x:Key="ProjectCardContainerStyle" TargetType="{x:Type ListBoxItem}">
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Margin" Value="0,0,10,10" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -213,8 +213,8 @@
         <Style x:Key="ProjectCardStyle" TargetType="{x:Type Border}">
             <Setter Property="Background" Value="{StaticResource CardBackground}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="14" />
-            <Setter Property="Padding" Value="14,12" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Padding" Value="12,9" />
             <Setter Property="Cursor" Value="Hand" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
@@ -500,6 +500,7 @@
             </Border>
         </StackPanel>
 
+        <!-- Karty ukladaja sie wierszami w dwie kolumny; szerokosc karty wylicza kod po zmianie rozmiaru listy -->
         <ListBox x:Name="ProjectsList"
                  ItemsSource="{Binding ActiveProjects}"
                  ItemContainerStyle="{StaticResource ProjectCardContainerStyle}"
@@ -507,10 +508,17 @@
                  BorderThickness="0"
                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 SizeChanged="_ProjectsList_SizeChanged"
                  PreviewMouseLeftButtonDown="ProjectsList_PreviewMouseLeftButtonDown"
                  MouseMove="ProjectsList_MouseMove"
                  Drop="ProjectsList_Drop"
                  AllowDrop="True">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal"
+                               ItemWidth="{Binding DataContext.CardWidth, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" />
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <Border Style="{StaticResource ProjectCardStyle}"
@@ -556,89 +564,131 @@
 
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="16" />
-                                <ColumnDefinition Width="34" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="24" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="145" />
                             </Grid.ColumnDefinitions>
 
                             <Border Width="4"
-                                    Height="28"
+                                    Height="22"
                                     CornerRadius="3"
                                     Background="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
+                                    HorizontalAlignment="Left"
                                     VerticalAlignment="Top"
-                                    Margin="0,3,0,0" />
+                                    Margin="0,1,0,0" />
 
                             <TextBlock Grid.Column="1"
                                        Text="{Binding Number}"
                                        Foreground="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
-                                       FontSize="16"
+                                       FontSize="15"
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Top" />
 
-                            <Grid Grid.Column="2">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
+                            <StackPanel Grid.Column="2">
+                                <DockPanel>
+                                    <!-- Galaz i flaga stanu; ukryte, dopoki stan Git nie zostal odczytany albo gdy katalog nie jest repozytorium -->
+                                    <StackPanel DockPanel.Dock="Right"
+                                                Orientation="Horizontal"
+                                                VerticalAlignment="Center"
+                                                Margin="10,0,0,0">
+                                        <StackPanel.Style>
+                                            <Style TargetType="{x:Type StackPanel}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding GitStatus.IsRepository}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </StackPanel.Style>
 
-                                <TextBlock Text="{Binding Name}"
-                                           FontSize="16"
-                                           FontWeight="SemiBold"
-                                           Foreground="#FFFFFF"
-                                           TextTrimming="CharacterEllipsis" />
+                                        <Border Background="#20222A"
+                                                CornerRadius="6"
+                                                Padding="7,1">
+                                            <TextBlock Text="{Binding GitStatus.Branch}"
+                                                       Foreground="{StaticResource TextSubtle}"
+                                                       FontSize="11"
+                                                       MaxWidth="160"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </Border>
 
-                                <TextBlock Grid.Row="1"
-                                           Text="{Binding Path}"
+                                        <TextBlock Text="●"
+                                                   FontSize="11"
+                                                   VerticalAlignment="Center"
+                                                   Margin="8,0,4,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="{x:Type TextBlock}">
+                                                    <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding GitStatus.StateKind}" Value="Dirty">
+                                                            <Setter Property="Foreground" Value="#FF9F1A" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding GitStatus.StateKind}" Value="CleanNotPushed">
+                                                            <Setter Property="Foreground" Value="#F2C900" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding GitStatus.StateKind}" Value="Clean">
+                                                            <Setter Property="Foreground" Value="#2ECC71" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+
+                                        <TextBlock Text="{Binding GitStatus.StateLabel}"
+                                                   Foreground="{StaticResource TextMuted}"
+                                                   FontSize="11"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="15"
+                                               FontWeight="SemiBold"
+                                               Foreground="#FFFFFF"
+                                               TextTrimming="CharacterEllipsis" />
+                                </DockPanel>
+
+                                <DockPanel Margin="0,4,0,0">
+                                    <TextBlock DockPanel.Dock="Right"
+                                               Text="{Binding LaunchInfo}"
+                                               Foreground="{StaticResource TextMuted}"
+                                               FontSize="10"
+                                               VerticalAlignment="Bottom"
+                                               Margin="10,0,0,1" />
+
+                                    <TextBlock Text="{Binding Description}"
+                                               Foreground="{StaticResource TextSubtle}"
+                                               FontSize="12">
+                                        <TextBlock.Style>
+                                            <!-- Zawijanie musi byc ustawione w stylu, bo wartosc lokalna przeslonilaby wyzwalacz Details -->
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="TextWrapping" Value="NoWrap" />
+                                                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding DataContext.ShowDetails, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
+                                                        <Setter Property="TextWrapping" Value="Wrap" />
+                                                        <Setter Property="TextTrimming" Value="None" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </DockPanel>
+
+                                <TextBlock Text="{Binding Path}"
                                            Visibility="{Binding DataContext.ProjectDetailsVisibility, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
                                            FontSize="11"
                                            Foreground="{StaticResource TextMuted}"
-                                           Margin="0,5,12,0"
+                                           Margin="0,6,0,0"
                                            TextTrimming="CharacterEllipsis" />
 
-                                 <TextBlock Grid.Row="2"
-                                            Text="{Binding Description}"
-                                            Foreground="{StaticResource TextSubtle}"
-                                            FontSize="13"
-                                            TextWrapping="NoWrap"
-                                            TextTrimming="CharacterEllipsis"
-                                            Margin="0,5,12,0">
-                                     <TextBlock.Style>
-                                         <Style TargetType="{x:Type TextBlock}">
-                                             <Setter Property="Visibility" Value="Visible" />
-                                             <Style.Triggers>
-                                                 <DataTrigger Binding="{Binding Description, Converter={StaticResource EmptyTextToVisibility}}" Value="Collapsed">
-                                                     <Setter Property="Visibility" Value="Collapsed" />
-                                                 </DataTrigger>
-                                                 <DataTrigger Binding="{Binding DataContext.ShowDetails, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
-                                                     <Setter Property="TextWrapping" Value="Wrap" />
-                                                     <Setter Property="TextTrimming" Value="None" />
-                                                     <Setter Property="Margin" Value="0,8,12,0" />
-                                                 </DataTrigger>
-                                             </Style.Triggers>
-                                         </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-
-                                <TextBlock Grid.Row="3"
-                                           Text="{Binding AgentNamesText}"
+                                <TextBlock Text="{Binding AgentNamesText}"
                                            Visibility="{Binding DataContext.ProjectDetailsVisibility, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
                                            Foreground="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
                                            FontSize="11"
                                            FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis"
-                                           Margin="0,8,12,0" />
-                            </Grid>
-
-                            <TextBlock Grid.Column="3"
-                                       Text="{Binding LaunchInfo}"
-                                       Foreground="{StaticResource TextMuted}"
-                                       FontSize="11"
-                                       TextAlignment="Right"
-                                       TextTrimming="CharacterEllipsis"
-                                       VerticalAlignment="Top" />
+                                           Margin="0,3,0,0" />
+                            </StackPanel>
                         </Grid>
                     </Border>
                 </DataTemplate>
