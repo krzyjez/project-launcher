@@ -10,6 +10,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using ProjectLauncher.Core;
 
@@ -18,36 +19,55 @@ namespace ProjectLauncher.Wpf;
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private const double WindowScreenMargin = 16;
+    private const int GitParallelism = 6;
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan RemoteRefreshInterval = TimeSpan.FromMinutes(5);
 
     private readonly ObservableCollection<ProjectItem> _projects = [];
     private Point _dragStartPoint;
     private bool _suppressNextClick;
     private string? _screenshotPath;
     private ProjectSortMode _sortMode = ProjectSortMode.LastLaunched;
-    private bool _showDetails;
+    private ProjectStatus _visibleStatus = ProjectStatus.Active;
+    private int _autoSleepAfterDays;
+    private bool _closeAllowed;
+    private bool _wasHidden;
+    private bool _refreshRunning;
+    private bool _registryLoadFailed;
+    private DateTime _lastRemoteRefresh = DateTime.MinValue;
+    private DateTime _registryWriteTime;
+    private readonly DispatcherTimer _refreshTimer = new() { Interval = RefreshInterval };
+
+    /// <summary>Okno zyje w tle z ikona w zasobniku: zamkniecie je chowa, a pokazanie wczytuje swiezy stan</summary>
+    public bool IsResident { get; init; }
 
     public ObservableCollection<ProjectItem> ActiveProjects { get; } = [];
     public ObservableCollection<ProjectItem> ShelvedProjects { get; } = [];
+    public ObservableCollection<ProjectItem> ClosedProjects { get; } = [];
     public ObservableCollection<TagFilterItem> TagFilters { get; } = [];
     public string LauncherVersion => typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "1.1.0";
 
-    public bool ShowDetails
+    /// <summary>Kategoria pokazywana w glownej liscie; domyslnie aktualne projekty</summary>
+    public ProjectStatus VisibleStatus
     {
-        get => _showDetails;
-        set
+        get => _visibleStatus;
+        private set
         {
-            if (_showDetails == value)
+            if (_visibleStatus == value)
                 return;
 
-            _showDetails = value;
+            _visibleStatus = value;
             _OnPropertyChanged();
-            _OnPropertyChanged(nameof(ProjectDetailsVisibility));
+            _OnPropertyChanged(nameof(VisibleProjects));
         }
     }
 
-    public Visibility ProjectDetailsVisibility => ShowDetails
-        ? Visibility.Visible
-        : Visibility.Collapsed;
+    /// <summary>Projekty wyswietlane w glownej liscie: aktualne, uspione albo archiwalne</summary>
+    public ObservableCollection<ProjectItem> VisibleProjects => _ListFor(VisibleStatus);
+
+    public string ActiveButtonText => $"Aktualne ({ActiveProjects.Count})";
+    public string ShelvedButtonText => $"Uśpione ({ShelvedProjects.Count})";
+    public string ClosedButtonText => $"Archiwum ({ClosedProjects.Count})";
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -58,29 +78,180 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SourceInitialized += (_, _) => _ApplyWindowHeightLimit();
         LocationChanged += (_, _) => _ApplyWindowHeightLimit();
         DpiChanged += (_, _) => _ApplyWindowHeightLimit();
+
+        // Odswiezanie dziala tylko wtedy, gdy okno jest na ekranie; schowane w zasobniku nie odpytuje repozytoriow.
+        _refreshTimer.Tick += async (_, _) => await _OnRefreshTimerTickAsync();
+        IsVisibleChanged += (_, _) =>
+        {
+            if (IsVisible)
+                _refreshTimer.Start();
+            else
+                _refreshTimer.Stop();
+        };
+
         DataContext = this;
         LoadSettings();
         LoadProjects();
+        _ApplyAutoSleep();
         UpdateSortButtons();
         RebuildTagFilters();
         RebuildProjectLists();
         ReadScreenshotArgument();
     }
 
+    /// <summary>Pokazuje okno na wierzchu; po wczesniejszym schowaniu wczytuje rejestr od nowa i odswieza stan Git</summary>
+    public void ShowLauncher()
+    {
+        // Po autostarcie okno nie bylo jeszcze chowane, ale rejestr mogl sie zmienic od logowania;
+        // nieaktualna lista zapisana przy uruchomieniu projektu skasowalaby zmiany innych narzedzi.
+        if (_wasHidden)
+        {
+            _wasHidden = false;
+            VisibleStatus = ProjectStatus.Active;
+            _TryReloadProjects();
+        }
+        else if (_GetRegistryWriteTime() != _registryWriteTime)
+        {
+            _TryReloadProjects();
+        }
+
+        Show();
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+
+        // Chwilowe Topmost wyciaga okno ponad inne aplikacje, gdy samo Activate nie wystarcza.
+        Topmost = true;
+        Activate();
+        Topmost = false;
+        Focus();
+    }
+
+    /// <summary>Pozwala naprawde zamknac okno przy wyjsciu z programu</summary>
+    public void AllowClose()
+    {
+        _closeAllowed = true;
+    }
+
+    // W trybie zasobnika kazde zamkniecie (Esc, ×, uruchomienie projektu, Alt+F4) tylko chowa okno.
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (IsResident && !_closeAllowed)
+        {
+            e.Cancel = true;
+            Hide();
+            _wasHidden = true;
+        }
+
+        base.OnClosing(e);
+    }
+
+    // Launcher dziala w tle, wiec blad odczytu nie moze go wywrocic: inne narzedzie moze wlasnie zapisywac rejestr.
+    // Zostaje dotychczasowa lista, ale zapis jest zablokowany do udanego odczytu (_registryLoadFailed).
+    private bool _TryReloadProjects()
+    {
+        try
+        {
+            _ReloadProjects();
+            _registryLoadFailed = false;
+            return true;
+        }
+        catch (Exception exception) when (exception is System.Text.Json.JsonException or IOException or UnauthorizedAccessException)
+        {
+            _registryLoadFailed = true;
+            Debug.WriteLine($"Odswiezenie rejestru: {exception.Message}");
+            return false;
+        }
+    }
+
+    // Kazda zmiana rejestru przechodzi tedy: jesli plik zmienil sie od ostatniego wczytania (albo odczyt sie nie
+    // udal), najpierw wczytujemy go od nowa i nanosimy zmiane na swieza liste; nieaktualnej listy nigdy nie zapisujemy.
+    // Zmiana dostaje biezaca liste i odnajduje w niej projekt po sciezce, bo obiekty mogly zostac podmienione.
+    private bool _UpdateRegistry(Func<IList<ProjectItem>, bool> change)
+    {
+        if ((_registryLoadFailed || _GetRegistryWriteTime() != _registryWriteTime) && !_TryReloadProjects())
+        {
+            MessageBox.Show(this, "Rejestr projektow jest chwilowo niedostepny albo uszkodzony, wiec zmiana nie zostala zapisana.\n\n" + ProjectLauncherPaths.GetProjectsFilePath(), "Projekty", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+
+        if (!change(_projects))
+            return false;
+
+        try
+        {
+            SaveProjects();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(this, $"Nie udalo sie zapisac rejestru projektow:\n{exception.Message}", "Projekty", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+
+        RebuildTagFilters();
+        RebuildProjectLists();
+        return true;
+    }
+
+    // Aktualny obiekt projektu o tej samej sciezce; po przeladowaniu rejestru karty moga wskazywac stare obiekty.
+    private static ProjectItem? _FindByPath(IList<ProjectItem> projects, ProjectItem project)
+    {
+        return projects.FirstOrDefault(candidate => SameProjectPath(candidate.Path, project.Path));
+    }
+
+    // Dlugo nieuruchamiane projekty same przechodza do uspionych. Nieudany zapis nie psuje odczytu:
+    // zmiana zostaje w pamieci i trafi do pliku przy nastepnej zmianie rejestru.
+    private void _ApplyAutoSleep()
+    {
+        if (ProjectRegistry.ApplyAutoSleep(_projects, _autoSleepAfterDays, DateOnly.FromDateTime(DateTime.Now)) == 0)
+            return;
+
+        try
+        {
+            SaveProjects();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Debug.WriteLine($"Zapis po uspieniu projektow: {exception.Message}");
+        }
+    }
+
+    // Rejestr moglo zmienic inne narzedzie, gdy okno bylo schowane; ostatni znany stan Git zostaje do czasu odswiezenia.
+    private void _ReloadProjects()
+    {
+        var previousStatuses = _projects
+            .Where(project => project.GitStatus is not null)
+            .GroupBy(project => project.Path, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().GitStatus, StringComparer.OrdinalIgnoreCase);
+
+        LoadSettings();
+        LoadProjects();
+        foreach (var project in _projects)
+        {
+            if (previousStatuses.TryGetValue(project.Path, out var status))
+                project.GitStatus = status;
+        }
+
+        _ApplyAutoSleep();
+
+        UpdateSortButtons();
+        RebuildTagFilters();
+        RebuildProjectLists();
+        _ = _RefreshGitStatusesAsync(_projects.ToList());
+    }
+
     private void LoadSettings()
     {
         var settings = ProjectRegistry.LoadSettings();
         _sortMode = settings.SortMode;
-        ShowDetails = settings.ShowDetails;
+        _autoSleepAfterDays = settings.AutoSleepAfterDays;
     }
 
+    // WPF nie ma juz przelacznika Details; zachowujemy zapisana wartosc, bo uzywa jej wersja Avalonia.
     private void SaveSettings()
     {
-        ProjectRegistry.SaveSettings(new ProjectLauncherSettings
-        {
-            SortMode = _sortMode,
-            ShowDetails = ShowDetails
-        });
+        var settings = ProjectRegistry.LoadSettings();
+        settings.SortMode = _sortMode;
+        ProjectRegistry.SaveSettings(settings);
     }
 
     // Okno rosnie pod liczbe projektow (SizeToContent), ale nie wyzej niz uzyteczna wysokosc ekranu;
@@ -135,22 +306,29 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void LoadProjects()
     {
+        // Najpierw odczyt, potem podmiana: nieudany odczyt nie moze zostawic pustej listy.
+        var loaded = ProjectRegistry.LoadProjects();
         _projects.Clear();
-        foreach (var project in ProjectRegistry.LoadProjects())
+        foreach (var project in loaded)
         {
             _projects.Add(project);
         }
+
+        _registryWriteTime = _GetRegistryWriteTime();
     }
 
     private void SaveProjects()
     {
         ProjectRegistry.SaveProjects(_projects);
+        // Wlasny zapis nie jest zmiana z zewnatrz i nie powinien przeladowywac listy przy nastepnym odswiezeniu.
+        _registryWriteTime = _GetRegistryWriteTime();
     }
 
     private void RebuildProjectLists()
     {
         ActiveProjects.Clear();
         ShelvedProjects.Clear();
+        ClosedProjects.Clear();
         var number = 1;
 
         foreach (var project in OrderedProjects())
@@ -160,19 +338,46 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 continue;
             }
 
-            if (project.Shelved)
-            {
-                ShelvedProjects.Add(project);
-                continue;
-            }
-
-            project.Number = number++;
-            ActiveProjects.Add(project);
+            // Numery 1-9 dostaja tylko aktualne projekty, bo tylko je uruchamia sie z klawiatury.
+            project.Number = project.Status == ProjectStatus.Active ? number++ : 0;
+            _ListFor(project.Status).Add(project);
         }
 
-        ShelvedProjectsPanel.Visibility = ShelvedProjects.Count == 0
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        // Po przeniesieniu ostatniego projektu z biezacego widoku nie ma czego w nim pokazywac.
+        if (VisibleProjects.Count == 0)
+            VisibleStatus = ProjectStatus.Active;
+
+        _UpdateCategoryButtons();
+    }
+
+    private ObservableCollection<ProjectItem> _ListFor(ProjectStatus status)
+    {
+        return status switch
+        {
+            ProjectStatus.Shelved => ShelvedProjects,
+            ProjectStatus.Closed => ClosedProjects,
+            _ => ActiveProjects
+        };
+    }
+
+    // Podswietla przycisk biezacej kategorii i odswieza liczniki na przyciskach.
+    private void _UpdateCategoryButtons()
+    {
+        ActiveCategoryButton.IsChecked = VisibleStatus == ProjectStatus.Active;
+        ShelvedCategoryButton.IsChecked = VisibleStatus == ProjectStatus.Shelved;
+        ClosedCategoryButton.IsChecked = VisibleStatus == ProjectStatus.Closed;
+        _OnPropertyChanged(nameof(ActiveButtonText));
+        _OnPropertyChanged(nameof(ShelvedButtonText));
+        _OnPropertyChanged(nameof(ClosedButtonText));
+    }
+
+    // Przelacza glowna liste na kategorie wskazana w Tag przycisku pod tagami.
+    private void _CategoryButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string value } && Enum.TryParse<ProjectStatus>(value, out var status))
+            VisibleStatus = status;
+
+        _UpdateCategoryButtons();
     }
 
     // Odtwarza panel tagow po zmianie danych projektow, zachowujac aktywne filtry.
@@ -216,13 +421,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         RebuildProjectLists();
     }
 
-    private void NormalizeProjectOrder()
-    {
-        ProjectRegistry.NormalizeOrder(_projects);
-    }
 
-    private void OpenProject(ProjectItem project)
+    // Otwiera katalog projektu albo wskazany worktree tego projektu; oba licza sie jako uruchomienie projektu.
+    private void OpenProject(ProjectItem project, string? worktreePath = null)
     {
+        var targetPath = worktreePath ?? project.Path;
         var editorPath = EditorLauncher.ResolveEditorPath();
         if (editorPath is null)
         {
@@ -230,18 +433,25 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        if (!Directory.Exists(project.Path))
+        if (!Directory.Exists(targetPath))
         {
-            MessageBox.Show(this, $"Nie znaleziono projektu:\n{project.Path}", "Projekty", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, $"Nie znaleziono projektu:\n{targetPath}", "Projekty", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
 
-        project.LaunchCount++;
-        project.LastLaunched = DateTime.Now.ToString("yyyy-MM-dd");
-        SaveProjects();
-        WorkspaceColorSettings.Apply(project.Path, project.Color);
+        // Licznik uruchomien jest informacja poboczna: przy niedostepnym rejestrze edytor i tak sie otwiera.
+        _UpdateRegistry(projects =>
+        {
+            if (_FindByPath(projects, project) is not { } current)
+                return false;
 
-        Process.Start(EditorLauncher.CreateStartInfo(editorPath, project.Path));
+            current.LaunchCount++;
+            current.LastLaunched = DateTime.Now.ToString("yyyy-MM-dd");
+            return true;
+        });
+        WorkspaceColorSettings.Apply(targetPath, project.Color);
+
+        Process.Start(EditorLauncher.CreateStartInfo(editorPath, targetPath));
 
         Close();
     }
@@ -270,7 +480,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             // Odstawiony projekt nie jest widoczny w glownej liscie, wiec bez tej podpowiedzi
             // komunikat wyglada jak blad rejestru.
-            var shelvedHint = existingProject.Shelved ? "\n\nProjekt jest wsrod odstawionych." : "";
+            var shelvedHint = existingProject.Status switch
+            {
+                ProjectStatus.Shelved => "\n\nProjekt jest wsrod uspionych.",
+                ProjectStatus.Closed => "\n\nProjekt jest w archiwum.",
+                _ => ""
+            };
             MessageBox.Show(this, $"Ten katalog jest juz w rejestrze:\n{projectPath}{shelvedHint}", "Projekty", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -292,11 +507,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         project.Tags = editor.Tags;
         project.Description = editor.DescriptionText;
 
-        _projects.Add(project);
-        NormalizeProjectOrder();
-        RebuildTagFilters();
-        RebuildProjectLists();
-        SaveProjects();
+        // W czasie dialogu inne narzedzie moglo dodac ten sam katalog; wtedy nie dublujemy wpisu.
+        var added = _UpdateRegistry(projects =>
+        {
+            if (_FindByPath(projects, project) is not null)
+                return false;
+
+            projects.Add(project);
+            ProjectRegistry.NormalizeOrder(projects);
+            return true;
+        });
+
+        if (added)
+            _ = _RefreshGitStatusesAsync([project]);
     }
 
     private ProjectItem CreateProjectFromPath(string projectPath)
@@ -312,7 +535,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             Tags = [],
             LastLaunched = "",
             LaunchCount = 0,
-            Shelved = false
+            Status = ProjectStatus.Active
         };
     }
 
@@ -409,12 +632,22 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         if (e.Key == Key.Escape)
         {
-            Close();
+            // Z widoku odstawionych Escape wraca do aktywnych zamiast zamykac launcher.
+            if (VisibleStatus != ProjectStatus.Active)
+            {
+                VisibleStatus = ProjectStatus.Active;
+                _UpdateCategoryButtons();
+            }
+            else
+            {
+                Close();
+            }
+
             return;
         }
 
         var number = KeyToNumber(e.Key);
-        if (number is not null && number.Value >= 1 && number.Value <= ActiveProjects.Count)
+        if (VisibleStatus == ProjectStatus.Active && number is not null && number.Value >= 1 && number.Value <= ActiveProjects.Count)
         {
             OpenProject(ActiveProjects[number.Value - 1]);
         }
@@ -422,14 +655,101 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        var gitRefresh = _RefreshGitStatusesAsync(_projects.ToList());
         if (string.IsNullOrWhiteSpace(_screenshotPath))
         {
             return;
         }
 
+        // Zrzut diagnostyczny ma pokazywac karty z juz odczytanym stanem Git.
+        await gitRefresh;
         await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         WindowScreenshot.SaveToPng(this, _screenshotPath);
         Close();
+    }
+
+    // Co minute, gdy okno jest widoczne: rejestr wczytujemy ponownie tylko po zmianie pliku, stan Git zawsze.
+    private async Task _OnRefreshTimerTickAsync()
+    {
+        if (_GetRegistryWriteTime() != _registryWriteTime)
+        {
+            _TryReloadProjects();
+            return;
+        }
+
+        await _RefreshGitStatusesAsync(_projects.ToList());
+    }
+
+    // Doczytuje stan Git w tle: najpierw szybki stan lokalny wszystkich projektow, potem porownanie z GitHubem.
+    // GitHub sprawdzamy rzadziej niz stan lokalny; w miedzyczasie zostaje poprzedni wynik, o ile HEAD sie nie zmienil.
+    private async Task _RefreshGitStatusesAsync(IReadOnlyList<ProjectItem> projects)
+    {
+        if (_refreshRunning)
+            return;
+
+        // Archiwum nie jest rozwijane, a jego katalogi moga juz nie istniec; nie odpytujemy go.
+        projects = projects.Where(project => project.Status != ProjectStatus.Closed).ToList();
+
+        _refreshRunning = true;
+        try
+        {
+            var checkRemote = DateTime.UtcNow - _lastRemoteRefresh >= RemoteRefreshInterval;
+            await _RunLimitedAsync(projects, async project =>
+                project.GitStatus = _KeepKnownSync(await GitStatusReader.ReadLocalAsync(project.Path), project.GitStatus));
+
+            if (checkRemote)
+                _lastRemoteRefresh = DateTime.UtcNow;
+
+            await _RunLimitedAsync(projects, async project =>
+            {
+                if (project.GitStatus is { IsRepository: true } local && (checkRemote || local.Sync == GitSyncState.Unknown))
+                    project.GitStatus = await GitStatusReader.ReadRemoteAsync(project.Path, local);
+            });
+        }
+        finally
+        {
+            _refreshRunning = false;
+        }
+    }
+
+    // Poprzedni wynik GitHuba jest nadal prawdziwy, jesli lokalnie nie zmienil sie HEAD ani galaz sledzona.
+    private static GitRepositoryStatus _KeepKnownSync(GitRepositoryStatus local, GitRepositoryStatus? previous)
+    {
+        return previous is not null &&
+               previous.HeadSha == local.HeadSha &&
+               previous.Branch == local.Branch &&
+               previous.Upstream == local.Upstream
+            ? local with { Sync = previous.Sync, AheadCount = previous.AheadCount }
+            : local;
+    }
+
+    // Data zapisu rejestru pozwala wykryc zmiane zrobiona przez inne narzedzie.
+    private static DateTime _GetRegistryWriteTime()
+    {
+        return File.GetLastWriteTimeUtc(ProjectLauncherPaths.GetProjectsFilePath());
+    }
+
+    // Uruchamia operacje dla projektow rownolegle, ale nie wiecej niz kilka procesow git naraz.
+    private static async Task _RunLimitedAsync(IReadOnlyList<ProjectItem> projects, Func<ProjectItem, Task> action)
+    {
+        using var limiter = new SemaphoreSlim(GitParallelism);
+        await Task.WhenAll(projects.Select(async project =>
+        {
+            await limiter.WaitAsync();
+            try
+            {
+                await action(project);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                // Stan Git jest tylko informacja dodatkowa: blad jednego repozytorium nie moze zatrzymac launchera.
+                Debug.WriteLine($"Stan Git dla {project.Path}: {exception.Message}");
+            }
+            finally
+            {
+                limiter.Release();
+            }
+        }));
     }
 
     private static int? KeyToNumber(Key key)
@@ -534,66 +854,60 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        var sourceIndex = _projects.IndexOf(source);
-        var targetIndex = _projects.IndexOf(target);
-        if (sourceIndex < 0 || targetIndex < 0)
+        _UpdateRegistry(projects =>
         {
-            return;
-        }
+            if (_FindByPath(projects, source) is not { } currentSource || _FindByPath(projects, target) is not { } currentTarget)
+                return false;
 
-        _projects.RemoveAt(sourceIndex);
-        targetIndex = _projects.IndexOf(target);
-        _projects.Insert(targetIndex, source);
-
-        NormalizeProjectOrder();
-        RebuildProjectLists();
-        SaveProjects();
+            projects.Remove(currentSource);
+            projects.Insert(projects.IndexOf(currentTarget), currentSource);
+            ProjectRegistry.NormalizeOrder(projects);
+            return true;
+        });
     }
 
-    private void ShelveProjectMenuItem_Click(object sender, RoutedEventArgs e)
+    // Przenosi projekt do kategorii wskazanej w Tag pozycji menu; data zmiany chroni go przed natychmiastowym uspieniem.
+    private void _MoveProjectMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        if (FindProjectItem(sender) is not { } project)
+        if (FindProjectItem(sender) is not { } project ||
+            sender is not FrameworkElement { Tag: string value } ||
+            !Enum.TryParse<ProjectStatus>(value, out var status))
+            return;
+
+        ProjectItem? moved = null;
+        _UpdateRegistry(projects =>
         {
-            return;
-        }
+            moved = _FindByPath(projects, project);
+            if (moved is null)
+                return false;
 
-        project.Shelved = true;
-        RebuildProjectLists();
-        SaveProjects();
-        _ScrollShelvedProjectIntoView(project);
+            moved.Status = status;
+            moved.StatusChanged = DateTime.Now.ToString("yyyy-MM-dd");
+
+            // Archiwum nie jest odpytywane o stan Git, wiec stary stan nie powinien udawac aktualnego.
+            if (status == ProjectStatus.Closed)
+                moved.GitStatus = null;
+
+            return true;
+        });
+
+        if (moved is not null)
+            _ = _RefreshGitStatusesAsync([moved]);
     }
 
-    // Pokazuje odstawiony projekt w dolnej sekcji; bez tego swiezo odstawiony projekt
-    // trafia pod widoczny obszar listy i wyglada na zniknietego.
-    private void _ScrollShelvedProjectIntoView(ProjectItem project)
+    // Otwiera VS Code w katalogu worktree kliknietego na karcie projektu.
+    private void _WorktreeButton_Click(object sender, RoutedEventArgs e)
     {
-        if (!ShelvedProjects.Contains(project))
+        if (sender is not FrameworkElement { DataContext: GitWorktree worktree })
             return;
 
-        ShelvedProjectsList.UpdateLayout();
-        ShelvedProjectsList.ScrollIntoView(project);
-    }
-
-    private void RestoreProjectMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        RestoreProject(FindProjectItem(sender));
+        if (FindAncestor<ListBoxItem>(sender as DependencyObject)?.DataContext is ProjectItem project)
+            OpenProject(project, worktree.Path);
     }
 
     private void DeleteProjectMenuItem_Click(object sender, RoutedEventArgs e)
     {
         DeleteProject(FindProjectItem(sender));
-    }
-
-    private void RestoreProject(ProjectItem? project)
-    {
-        if (project is null)
-        {
-            return;
-        }
-
-        project.Shelved = false;
-        RebuildProjectLists();
-        SaveProjects();
     }
 
     private void DeleteProject(ProjectItem? project)
@@ -615,10 +929,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        _projects.Remove(project);
-        NormalizeProjectOrder();
-        RebuildProjectLists();
-        SaveProjects();
+        _UpdateRegistry(projects =>
+        {
+            if (_FindByPath(projects, project) is not { } current)
+                return false;
+
+            projects.Remove(current);
+            ProjectRegistry.NormalizeOrder(projects);
+            return true;
+        });
     }
 
     // Wybiera tryb sortowania wskazany przez przycisk w naglowku.
@@ -645,13 +964,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SortByNameButton.IsChecked = _sortMode == ProjectSortMode.Name;
     }
 
-    // Zapisuje preferencje widoku szczegolowego od razu po przelaczeniu.
-    private void _DetailsToggleButton_Click(object sender, RoutedEventArgs e)
-    {
-        ShowDetails = DetailsToggleButton.IsChecked == true;
-        SaveSettings();
-    }
-
     // Przelacza pojedynczy tag bez zapisywania tymczasowego filtra do ustawien.
     private void TagFilterButton_Click(object sender, RoutedEventArgs e)
     {
@@ -673,17 +985,22 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             Owner = this
         };
 
-        if (dialog.ShowDialog() == true)
+        if (dialog.ShowDialog() != true)
+            return;
+
+        // W czasie dialogu rejestr mogl zostac przeladowany, wiec zmiany trafiaja do aktualnego obiektu projektu.
+        _UpdateRegistry(projects =>
         {
-            project.Name = dialog.ProjectName;
-            project.Color = dialog.ProjectColor;
-            project.AgentNames = dialog.AgentNames;
-            project.Tags = dialog.Tags;
-            project.Description = dialog.DescriptionText;
-            SaveProjects();
-            RebuildTagFilters();
-            RebuildProjectLists();
-        }
+            if (_FindByPath(projects, project) is not { } current)
+                return false;
+
+            current.Name = dialog.ProjectName;
+            current.Color = dialog.ProjectColor;
+            current.AgentNames = dialog.AgentNames;
+            current.Tags = dialog.Tags;
+            current.Description = dialog.DescriptionText;
+            return true;
+        });
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)

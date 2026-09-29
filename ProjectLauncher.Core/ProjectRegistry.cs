@@ -68,6 +68,34 @@ public static class ProjectRegistry
         }
     }
 
+    /// <summary>Usypia aktywne projekty, ktore nie byly uruchamiane ani przenoszone miedzy kategoriami przez `afterDays` dni; zwraca liczbe uspionych</summary>
+    public static int ApplyAutoSleep(IEnumerable<ProjectItem> projects, int afterDays, DateOnly today)
+    {
+        if (afterDays <= 0)
+            return 0;
+
+        var sleptCount = 0;
+        foreach (var project in projects.Where(project => project.Status == ProjectStatus.Active))
+        {
+            // Liczy sie pozniejsza z dat: reczne przywrocenie do aktualnych daje projektowi nowy okres.
+            var lastActivity = new[] { _ParseDate(project.LastLaunched), _ParseDate(project.StatusChanged) }.Max();
+            if (lastActivity is null || today.DayNumber - lastActivity.Value.DayNumber < afterDays)
+                continue;
+
+            project.Status = ProjectStatus.Shelved;
+            project.StatusChanged = today.ToString("yyyy-MM-dd");
+            sleptCount++;
+        }
+
+        return sleptCount;
+    }
+
+    // Daty w rejestrze maja format `yyyy-MM-dd`; brak albo bledny zapis oznacza brak daty.
+    private static DateOnly? _ParseDate(string value)
+    {
+        return value.Length >= 10 && DateOnly.TryParseExact(value[..10], "yyyy-MM-dd", out var date) ? date : null;
+    }
+
     /// <summary>Zwraca projekty w kolejnosci wybranego trybu sortowania</summary>
     public static IEnumerable<ProjectItem> Ordered(IEnumerable<ProjectItem> projects, ProjectSortMode sortMode)
     {

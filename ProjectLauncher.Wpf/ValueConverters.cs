@@ -42,6 +42,36 @@ public sealed class ProjectColorToBrushConverter : IValueConverter
     }
 }
 
+/// <summary>Pokazuje element, gdy powiazana flaga jest wylaczona; odwrotnosc wbudowanego BooleanToVisibilityConverter</summary>
+public sealed class InverseBooleanToVisibilityConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        return value is true ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotSupportedException();
+    }
+}
+
+/// <summary>Ukrywa element, gdy projekt jest w kategorii podanej w parametrze; np. "Przenies do archiwum" znika w archiwum</summary>
+public sealed class ProjectStatusNotEqualToVisibilityConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        return value is ProjectStatus status && Enum.TryParse<ProjectStatus>(parameter as string, out var hidden) && status == hidden
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotSupportedException();
+    }
+}
+
 /// <summary>Ukrywa element, gdy powiazany tekst jest pusty</summary>
 public sealed class EmptyTextToVisibilityConverter : IValueConverter
 {

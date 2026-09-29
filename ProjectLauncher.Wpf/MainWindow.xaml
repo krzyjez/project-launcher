@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:ProjectLauncher.Wpf"
         mc:Ignorable="d"
         Title="Projekty"
-        Width="930"
+        Width="1480"
         MinWidth="800"
         MinHeight="360"
         SizeToContent="Height"
@@ -21,6 +21,9 @@
     <Window.Resources>
         <local:ProjectColorToBrushConverter x:Key="ProjectColorToBrush" />
         <local:EmptyTextToVisibilityConverter x:Key="EmptyTextToVisibility" />
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
+        <local:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibility" />
+        <local:ProjectStatusNotEqualToVisibilityConverter x:Key="StatusNotEqualToVisibility" />
 
         <SolidColorBrush x:Key="CardBackground" Color="#15161B" />
         <SolidColorBrush x:Key="CardHoverBackground" Color="#1E2028" />
@@ -197,7 +200,7 @@
         <Style x:Key="ProjectCardContainerStyle" TargetType="{x:Type ListBoxItem}">
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Margin" Value="0,0,0,12" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -212,9 +215,9 @@
 
         <Style x:Key="ProjectCardStyle" TargetType="{x:Type Border}">
             <Setter Property="Background" Value="{StaticResource CardBackground}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="14" />
-            <Setter Property="Padding" Value="14,12" />
+            <Setter Property="BorderThickness" Value="2.5" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Padding" Value="12,10" />
             <Setter Property="Cursor" Value="Hand" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
@@ -231,6 +234,150 @@
             <Setter Property="Padding" Value="10,8" />
             <Setter Property="MaxWidth" Value="360" />
             <Setter Property="FontSize" Value="13" />
+        </Style>
+
+        <!-- Ikonka rozwijania pojedynczej karty; nie otwiera projektu, bo przycisk sam obsluguje klikniecie -->
+        <Style x:Key="ExpandToggleStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="ToolTip" Value="Rozwin szczegoly projektu" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Border x:Name="ExpandBorder"
+                                Background="Transparent"
+                                CornerRadius="5">
+                            <TextBlock x:Name="ExpandGlyph"
+                                       Text="&#xE70D;"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="10"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ExpandBorder" Property="Background" Value="#2A2D36" />
+                                <Setter Property="Foreground" Value="#FFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="ExpandGlyph" Property="Text" Value="&#xE70E;" />
+                                <Setter Property="ToolTip" Value="Zwin szczegoly projektu" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Kazdy element dostaje wlasna instancje dymka; wspolny obiekt ToolTip nie moze nalezec do kilku kart naraz -->
+        <ToolTip x:Key="BranchDescriptionToolTip"
+                 x:Shared="False"
+                 Style="{StaticResource ProjectDescriptionToolTipStyle}">
+            <TextBlock Text="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource AncestorType={x:Type ToolTip}}}"
+                       TextWrapping="Wrap" />
+        </ToolTip>
+
+        <!-- Nosnik dymka z opisem galezi: opis przychodzi w Tag, a pusty opis nie pokazuje pustego dymka -->
+        <Style x:Key="BranchDescriptionHostStyle" TargetType="{x:Type Border}">
+            <Setter Property="ToolTipService.InitialShowDelay" Value="250" />
+            <Setter Property="ToolTipService.ShowDuration" Value="60000" />
+            <Setter Property="ToolTip" Value="{StaticResource BranchDescriptionToolTip}" />
+            <Style.Triggers>
+                <Trigger Property="Tag" Value="">
+                    <Setter Property="ToolTip" Value="{x:Null}" />
+                </Trigger>
+                <Trigger Property="Tag" Value="{x:Null}">
+                    <Setter Property="ToolTip" Value="{x:Null}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Wiersz worktree wewnatrz karty projektu: cala szerokosc karty, obramowanie podswietla sie po najechaniu -->
+        <Style x:Key="WorktreeButtonStyle" TargetType="{x:Type Button}">
+            <Setter Property="Foreground" Value="{StaticResource TextSubtle}" />
+            <Setter Property="Margin" Value="0,6,0,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border x:Name="WorktreeBorder"
+                                Background="#181A20"
+                                BorderBrush="#383A43"
+                                BorderThickness="1.5"
+                                CornerRadius="8"
+                                Padding="10,6">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="WorktreeBorder" Property="BorderBrush" Value="{StaticResource Accent}" />
+                                <Setter Property="Foreground" Value="#FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Sciezka i agenci: widoczne po rozwinieciu karty -->
+        <Style x:Key="CardDetailStyle" TargetType="{x:Type TextBlock}">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Przycisk kategorii projektow pod tagami: ikona i licznik wyrownane do lewej -->
+        <Style x:Key="CategoryToggleButtonStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Foreground" Value="#D8D2C8" />
+            <Setter Property="BorderBrush" Value="#383A43" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Border x:Name="CategoryBorder"
+                                Background="Transparent"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="10,0">
+                            <ContentPresenter HorizontalAlignment="Left"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CategoryBorder" Property="Background" Value="#24262D" />
+                                <Setter Property="Foreground" Value="#FFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CategoryBorder" Property="Background" Value="#24262D" />
+                                <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+                                <Setter Property="Foreground" Value="#FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CategoryIconStyle" TargetType="{x:Type TextBlock}">
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Width" Value="22" />
+            <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
         <Style x:Key="TagFilterButtonStyle" TargetType="{x:Type Button}">
@@ -270,6 +417,10 @@
     </Window.Resources>
 
     <DockPanel Margin="18">
+        <!-- Cale okno w powiekszeniu 120%, jak skala interfejsu w wizualizerze sesji; szerokosc okna uwzglednia to powiekszenie -->
+        <DockPanel.LayoutTransform>
+            <ScaleTransform ScaleX="1.2" ScaleY="1.2" />
+        </DockPanel.LayoutTransform>
         <Grid DockPanel.Dock="Top" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -292,14 +443,6 @@
             </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <ToggleButton x:Name="DetailsToggleButton"
-                              Content="Details"
-                              Click="_DetailsToggleButton_Click"
-                              IsChecked="{Binding ShowDetails, Mode=TwoWay}"
-                              ToolTip="Pokaz szczegoly projektu"
-                              Style="{StaticResource HeaderToggleButtonStyle}"
-                              Margin="0,0,8,0" />
-
                 <Button x:Name="AddProjectButton"
                         Content="+"
                         Click="AddProjectButton_Click"
@@ -355,6 +498,39 @@
                            FontSize="11"
                            FontWeight="SemiBold"
                            Margin="1,0,0,8" />
+                <!-- Kategorie projektow: przelaczaja glowna liste; zaznaczenie ustawia kod (_UpdateCategoryButtons) -->
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                    <ToggleButton x:Name="ActiveCategoryButton"
+                                  Tag="Active"
+                                  Click="_CategoryButton_Click"
+                                  ToolTip="Projekty, nad ktorymi pracujesz"
+                                  Style="{StaticResource CategoryToggleButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE945;" Style="{StaticResource CategoryIconStyle}" Foreground="#FFB020" />
+                            <TextBlock Text="{Binding ActiveButtonText}" />
+                        </StackPanel>
+                    </ToggleButton>
+                    <ToggleButton x:Name="ShelvedCategoryButton"
+                                  Tag="Shelved"
+                                  Click="_CategoryButton_Click"
+                                  ToolTip="Projekty uzywane rzadko, do ktorych mozesz wrocic"
+                                  Style="{StaticResource CategoryToggleButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE708;" Style="{StaticResource CategoryIconStyle}" Foreground="#9DB8D5" />
+                            <TextBlock Text="{Binding ShelvedButtonText}" />
+                        </StackPanel>
+                    </ToggleButton>
+                    <ToggleButton x:Name="ClosedCategoryButton"
+                                  Tag="Closed"
+                                  Click="_CategoryButton_Click"
+                                  ToolTip="Projekty zamkniete, zachowane do wgladu"
+                                  Style="{StaticResource CategoryToggleButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE7B8;" Style="{StaticResource CategoryIconStyle}" Foreground="#B8B8C8" />
+                            <TextBlock Text="{Binding ClosedButtonText}" />
+                        </StackPanel>
+                    </ToggleButton>
+                </StackPanel>
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
@@ -387,121 +563,10 @@
             </DockPanel>
         </Border>
 
-        <StackPanel x:Name="ShelvedProjectsPanel"
-                    DockPanel.Dock="Bottom"
-                    Margin="0,6,0,0">
-            <TextBlock Text="Odstawione"
-                       Foreground="{StaticResource TextMuted}"
-                       FontSize="11"
-                       FontWeight="SemiBold"
-                       Margin="1,0,0,6" />
-
-            <Border Background="#101116"
-                    BorderBrush="#30313A"
-                    BorderThickness="1"
-                    CornerRadius="9"
-                    Padding="8,5">
-                <ListBox x:Name="ShelvedProjectsList"
-                         ItemsSource="{Binding ShelvedProjects}"
-                         MaxHeight="300"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <ListBox.ItemContainerStyle>
-                        <Style TargetType="{x:Type ListBoxItem}">
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                            <Setter Property="Padding" Value="0" />
-                            <Setter Property="Margin" Value="0" />
-                            <Setter Property="Background" Value="Transparent" />
-                            <Setter Property="BorderThickness" Value="0" />
-                            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="{x:Type ListBoxItem}">
-                                        <ContentPresenter />
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </ListBox.ItemContainerStyle>
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Cursor="Hand"
-                                   ToolTipService.InitialShowDelay="250"
-                                   ToolTipService.ShowDuration="60000"
-                                   MouseLeftButtonUp="ProjectCard_MouseLeftButtonUp"
-                                   Margin="0,1"
-                                   MinHeight="18">
-                                <Grid.ToolTip>
-                                    <ToolTip DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
-                                             Style="{StaticResource ProjectDescriptionToolTipStyle}">
-                                        <StackPanel>
-                                            <TextBlock Text="Katalog"
-                                                       Foreground="{StaticResource TextMuted}"
-                                                       FontSize="10"
-                                                       FontWeight="SemiBold" />
-                                            <TextBlock Text="{Binding Path}"
-                                                       TextWrapping="Wrap"
-                                                       Margin="0,2,0,8" />
-
-                                            <TextBlock Text="Opis"
-                                                       Visibility="{Binding Description, Converter={StaticResource EmptyTextToVisibility}}"
-                                                       Foreground="{StaticResource TextMuted}"
-                                                       FontSize="10"
-                                                       FontWeight="SemiBold" />
-                                            <TextBlock Text="{Binding Description}"
-                                                       Visibility="{Binding Description, Converter={StaticResource EmptyTextToVisibility}}"
-                                                       TextWrapping="Wrap"
-                                                       Margin="0,2,0,8" />
-
-                                            <TextBlock Text="{Binding AgentNamesText}"
-                                                       Foreground="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
-                                                       TextWrapping="Wrap" />
-                                        </StackPanel>
-                                    </ToolTip>
-                                </Grid.ToolTip>
-                                <Grid.ContextMenu>
-                                    <ContextMenu>
-                                        <MenuItem Header="Aktywuj" Click="RestoreProjectMenuItem_Click" />
-                                        <MenuItem Header="Edytuj projekt" Click="EditDescriptionMenuItem_Click" />
-                                        <MenuItem Header="Usun" Click="DeleteProjectMenuItem_Click" />
-                                    </ContextMenu>
-                                </Grid.ContextMenu>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <TextBlock Text="{Binding Name}"
-                                           FontSize="12"
-                                           FontWeight="SemiBold"
-                                           Foreground="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
-                                           TextTrimming="CharacterEllipsis" />
-
-                                <TextBlock Grid.Column="1"
-                                           Text="{Binding DescriptionFirstLine}"
-                                           FontSize="10"
-                                           Foreground="{StaticResource TextMuted}"
-                                           Margin="10,2,0,0"
-                                           TextTrimming="CharacterEllipsis" />
-
-                                <TextBlock Grid.Column="2"
-                                           Text="{Binding LaunchInfo}"
-                                           FontSize="10"
-                                           Foreground="{StaticResource TextMuted}"
-                                           TextAlignment="Right"
-                                           Margin="12,2,0,0" />
-                            </Grid>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </Border>
-        </StackPanel>
-
+        <!-- Karty ukladaja sie wierszami w dwie kolumny; szerokosc karty wylicza kod po zmianie rozmiaru listy.
+             Ta sama lista pokazuje aktywne albo odstawione projekty, zaleznie od przycisku pod tagami. -->
         <ListBox x:Name="ProjectsList"
-                 ItemsSource="{Binding ActiveProjects}"
+                 ItemsSource="{Binding VisibleProjects}"
                  ItemContainerStyle="{StaticResource ProjectCardContainerStyle}"
                  Background="Transparent"
                  BorderThickness="0"
@@ -511,6 +576,11 @@
                  MouseMove="ProjectsList_MouseMove"
                  Drop="ProjectsList_Drop"
                  AllowDrop="True">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <local:TwoColumnPanel ColumnGap="12" />
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <Border Style="{StaticResource ProjectCardStyle}"
@@ -550,95 +620,209 @@
                         <Border.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Edytuj projekt" Click="EditDescriptionMenuItem_Click" />
-                                <MenuItem Header="Odstaw" Click="ShelveProjectMenuItem_Click" />
+                                <Separator />
+                                <!-- Przenoszenie miedzy kategoriami; pozycja biezacej kategorii jest ukryta -->
+                                <MenuItem Header="Przenieś do aktualnych"
+                                          Tag="Active"
+                                          Click="_MoveProjectMenuItem_Click"
+                                          Visibility="{Binding Status, Converter={StaticResource StatusNotEqualToVisibility}, ConverterParameter=Active}" />
+                                <MenuItem Header="Przenieś do uśpionych"
+                                          Tag="Shelved"
+                                          Click="_MoveProjectMenuItem_Click"
+                                          Visibility="{Binding Status, Converter={StaticResource StatusNotEqualToVisibility}, ConverterParameter=Shelved}" />
+                                <MenuItem Header="Przenieś do archiwum"
+                                          Tag="Closed"
+                                          Click="_MoveProjectMenuItem_Click"
+                                          Visibility="{Binding Status, Converter={StaticResource StatusNotEqualToVisibility}, ConverterParameter=Closed}" />
+                                <MenuItem Header="Usuń z rejestru"
+                                          Click="DeleteProjectMenuItem_Click"
+                                          Visibility="{Binding Shelved, Converter={StaticResource BooleanToVisibility}}" />
                             </ContextMenu>
                         </Border.ContextMenu>
 
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="16" />
-                                <ColumnDefinition Width="34" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="24" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="145" />
                             </Grid.ColumnDefinitions>
 
                             <Border Width="4"
-                                    Height="28"
+                                    Height="22"
                                     CornerRadius="3"
                                     Background="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
+                                    HorizontalAlignment="Left"
                                     VerticalAlignment="Top"
-                                    Margin="0,3,0,0" />
+                                    Margin="0,1,0,0" />
 
+                            <!-- Odstawione projekty nie maja numeru, bo klawisze 1-9 dotycza tylko aktywnych -->
                             <TextBlock Grid.Column="1"
                                        Text="{Binding Number}"
+                                       Visibility="{Binding Shelved, Converter={StaticResource InverseBooleanToVisibility}}"
                                        Foreground="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
-                                       FontSize="16"
+                                       FontSize="15"
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Top" />
 
-                            <Grid Grid.Column="2">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
+                            <StackPanel Grid.Column="2">
+                                <DockPanel>
+                                    <ToggleButton DockPanel.Dock="Right"
+                                                  IsChecked="{Binding IsExpanded, Mode=TwoWay}"
+                                                  Style="{StaticResource ExpandToggleStyle}"
+                                                  VerticalAlignment="Center" />
 
-                                <TextBlock Text="{Binding Name}"
-                                           FontSize="16"
-                                           FontWeight="SemiBold"
-                                           Foreground="#FFFFFF"
-                                           TextTrimming="CharacterEllipsis" />
+                                    <!-- Galaz i flaga stanu; ukryte, dopoki stan Git nie zostal odczytany albo gdy katalog nie jest repozytorium -->
+                                    <StackPanel DockPanel.Dock="Right"
+                                                Orientation="Horizontal"
+                                                VerticalAlignment="Center"
+                                                Margin="10,0,0,0">
+                                        <StackPanel.Style>
+                                            <Style TargetType="{x:Type StackPanel}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding GitStatus.IsRepository}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </StackPanel.Style>
 
-                                <TextBlock Grid.Row="1"
-                                           Text="{Binding Path}"
-                                           Visibility="{Binding DataContext.ProjectDetailsVisibility, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                                           FontSize="11"
+                                        <!-- Dymek z opisem zadania branch biezacej galezi -->
+                                        <Border Background="#262933"
+                                                CornerRadius="6"
+                                                Padding="8,2"
+                                                Style="{StaticResource BranchDescriptionHostStyle}"
+                                                Tag="{Binding GitStatus.TaskDescription}">
+                                            <TextBlock Text="{Binding GitStatus.Branch}"
+                                                       Foreground="#E4DDCB"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       MaxWidth="190"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </Border>
+
+                                        <!-- Kropka i opis stanu w tym samym kolorze, zeby flaga byla czytelna z daleka -->
+                                        <TextBlock FontSize="13"
+                                                   FontWeight="Bold"
+                                                   VerticalAlignment="Center"
+                                                   Margin="10,0,0,0">
+                                            <Run Text="● " />
+                                            <Run Text="{Binding GitStatus.StateLabel, Mode=OneWay}" />
+                                            <TextBlock.Style>
+                                                <Style TargetType="{x:Type TextBlock}">
+                                                    <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding GitStatus.StateKind}" Value="Dirty">
+                                                            <Setter Property="Foreground" Value="#FF9F1A" />
+                                                        </DataTrigger>
+                                                        <!-- Pomaranczowe brudne, zielone czyste ale niewypchniete, niebieskie wypchniete na GitHuba -->
+                                                        <DataTrigger Binding="{Binding GitStatus.StateKind}" Value="CleanNotPushed">
+                                                            <Setter Property="Foreground" Value="#2ECC71" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding GitStatus.StateKind}" Value="Clean">
+                                                            <Setter Property="Foreground" Value="#4DA3FF" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="17"
+                                               FontWeight="Bold"
+                                               Foreground="#FFFFFF"
+                                               TextTrimming="CharacterEllipsis" />
+                                </DockPanel>
+
+                                <DockPanel Margin="0,4,0,0">
+                                    <TextBlock DockPanel.Dock="Right"
+                                               Text="{Binding LaunchInfo}"
+                                               Foreground="{StaticResource TextMuted}"
+                                               FontSize="11"
+                                               VerticalAlignment="Bottom"
+                                               Margin="10,0,0,1" />
+
+                                    <!-- Opis zawsze w calosci; strzalka rozwija tylko sciezke i agentow -->
+                                    <TextBlock Text="{Binding Description}"
+                                               Foreground="{StaticResource TextSubtle}"
+                                               FontSize="13"
+                                               TextWrapping="Wrap" />
+                                </DockPanel>
+
+                                <TextBlock Text="{Binding Path}"
+                                           Style="{StaticResource CardDetailStyle}"
                                            Foreground="{StaticResource TextMuted}"
-                                           Margin="0,5,12,0"
-                                           TextTrimming="CharacterEllipsis" />
+                                           Margin="0,6,0,0" />
 
-                                 <TextBlock Grid.Row="2"
-                                            Text="{Binding Description}"
-                                            Foreground="{StaticResource TextSubtle}"
-                                            FontSize="13"
-                                            TextWrapping="NoWrap"
-                                            TextTrimming="CharacterEllipsis"
-                                            Margin="0,5,12,0">
-                                     <TextBlock.Style>
-                                         <Style TargetType="{x:Type TextBlock}">
-                                             <Setter Property="Visibility" Value="Visible" />
-                                             <Style.Triggers>
-                                                 <DataTrigger Binding="{Binding Description, Converter={StaticResource EmptyTextToVisibility}}" Value="Collapsed">
-                                                     <Setter Property="Visibility" Value="Collapsed" />
-                                                 </DataTrigger>
-                                                 <DataTrigger Binding="{Binding DataContext.ShowDetails, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
-                                                     <Setter Property="TextWrapping" Value="Wrap" />
-                                                     <Setter Property="TextTrimming" Value="None" />
-                                                     <Setter Property="Margin" Value="0,8,12,0" />
-                                                 </DataTrigger>
-                                             </Style.Triggers>
-                                         </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-
-                                <TextBlock Grid.Row="3"
-                                           Text="{Binding AgentNamesText}"
-                                           Visibility="{Binding DataContext.ProjectDetailsVisibility, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                <TextBlock Text="{Binding AgentNamesText}"
+                                           Style="{StaticResource CardDetailStyle}"
                                            Foreground="{Binding Color, Converter={StaticResource ProjectColorToBrush}}"
-                                           FontSize="11"
                                            FontWeight="SemiBold"
-                                           TextTrimming="CharacterEllipsis"
-                                           Margin="0,8,12,0" />
-                            </Grid>
+                                           Margin="0,3,0,0" />
 
-                            <TextBlock Grid.Column="3"
-                                       Text="{Binding LaunchInfo}"
-                                       Foreground="{StaticResource TextMuted}"
-                                       FontSize="11"
-                                       TextAlignment="Right"
-                                       TextTrimming="CharacterEllipsis"
-                                       VerticalAlignment="Top" />
+                                <!-- Dodatkowe worktree repozytorium jako wiersze z galezia, czystoscia i opisem zadania;
+                                     klikniecie wiersza otwiera VS Code w katalogu worktree -->
+                                <ItemsControl ItemsSource="{Binding GitStatus.Worktrees}"
+                                              Margin="0,4,0,0">
+                                    <ItemsControl.Style>
+                                        <Style TargetType="{x:Type ItemsControl}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding GitStatus.Worktrees.Count}" Value="0">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding GitStatus}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ItemsControl.Style>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource WorktreeButtonStyle}"
+                                                    Click="_WorktreeButton_Click"
+                                                    ToolTip="{Binding Path}">
+                                                <StackPanel>
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Right"
+                                                                   FontSize="12"
+                                                                   FontWeight="Bold"
+                                                                   Margin="10,0,0,0">
+                                                            <Run Text="● " />
+                                                            <Run Text="{Binding StateLabel, Mode=OneWay}" />
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="{x:Type TextBlock}">
+                                                                    <Setter Property="Foreground" Value="#2ECC71" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsDirty}" Value="True">
+                                                                            <Setter Property="Foreground" Value="#FF9F1A" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="worktree "
+                                                                       Foreground="{StaticResource TextMuted}"
+                                                                       FontSize="13" />
+                                                            <!-- Dymek z opisem zadania worktree albo tematem ostatniego commita -->
+                                                            <Border Style="{StaticResource BranchDescriptionHostStyle}"
+                                                                    Tag="{Binding Description}"
+                                                                    Background="Transparent">
+                                                                <TextBlock Text="{Binding Branch}"
+                                                                           FontSize="13"
+                                                                           FontWeight="SemiBold"
+                                                                           Foreground="#E4DDCB"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </DockPanel>
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                         </Grid>
                     </Border>
                 </DataTemplate>

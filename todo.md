@@ -1,5 +1,10 @@
 # Todo
 
+# 2. [todo] Przejście innych narzędzi na pole `status` w rejestrze
+
+a) Wizualizer sesji (`P:\ai\tools\agent-session-visualizer`, `ProjectRegistryItem.cs`) i `project-audit-report` (`ProjectRegistryReader.cs`) czytają jeszcze `shelved`; skill `project-launcher` w `P:\ai` przy dodawaniu projektu wpisuje `shelved: false`. Przełączyć je na `status` (`active`/`shelved`/`closed`, brak = `active`).
+b) Po ich aktualizacji przestać zapisywać `shelved` w launcherze (`ProjectItem.Shelved`) i zaktualizować kontrakt w `readme.md`.
+
 # 1. [todo] Uruchomienie launchera pod Linux Mint (Cinnamon)
 
 a) Przed pierwszym startem dual boota wyłączyć w Windowsie szybkie uruchamianie. Bez tego Mint montuje wspólne dyski NTFS tylko do odczytu albo odmawia montowania. Instrukcja do podania, gdy nowy dysk pod Linuksa będzie gotowy.

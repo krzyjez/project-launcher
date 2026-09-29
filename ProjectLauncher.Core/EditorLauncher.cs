@@ -19,15 +19,27 @@ public static class EditorLauncher
         return _FindOnPath("code.cmd") ?? _FindOnPath("code.exe");
     }
 
-    /// <summary>Tworzy parametry startowe otwierajace projekt w osobnym oknie VS Code.</summary>
+    /// <summary>Tworzy parametry startowe otwierajace projekt w osobnym oknie VS Code, bez zmiennych srodowiskowych odziedziczonych po VS Code.</summary>
     public static ProcessStartInfo CreateStartInfo(string editorPath, string projectPath)
     {
-        return new ProcessStartInfo
+        // Bez powloki, zeby dalo sie oczyscic srodowisko; brak okna konsoli dotyczy tylko code.cmd.
+        var startInfo = new ProcessStartInfo(editorPath)
         {
-            FileName = editorPath,
-            Arguments = $"--new-window \"{projectPath}\"",
-            UseShellExecute = true
+            UseShellExecute = false,
+            CreateNoWindow = true
         };
+        startInfo.ArgumentList.Add("--new-window");
+        startInfo.ArgumentList.Add(projectPath);
+
+        // Launcher uruchomiony z terminala VS Code dziedziczy ELECTRON_RUN_AS_NODE=1: Code.exe startuje wtedy
+        // jako zwykly Node.js i konczy sie bez okna, a zmienne VSCODE_* kieruja go do obcej instancji edytora.
+        foreach (var name in startInfo.Environment.Keys.ToList())
+        {
+            if (name == "ELECTRON_RUN_AS_NODE" || name.StartsWith("VSCODE_", StringComparison.OrdinalIgnoreCase))
+                startInfo.Environment.Remove(name);
+        }
+
+        return startInfo;
     }
 
     // Zwraca najczestsze lokalizacje instalacji VS Code na Windows.

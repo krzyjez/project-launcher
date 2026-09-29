@@ -6,11 +6,19 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <!-- WinForms tylko dla ikony w zasobniku (NotifyIcon); WPF nie ma wlasnej -->
+    <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
     <Version>1.1.2</Version>
     <!-- Publikacja zawsze trafia do dist, na ktory wskazuje skrot Projekty.lnk -->
     <PublishDir>$(MSBuildProjectDirectory)\..\dist\</PublishDir>
   </PropertyGroup>
+
+  <!-- Globalne usingi WinForms kolidowalyby z typami WPF o tych samych nazwach (MessageBox, Button, Point) -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ProjectLauncher.Core\ProjectLauncher.Core.csproj" />

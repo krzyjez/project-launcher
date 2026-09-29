@@ -35,8 +35,11 @@ public sealed class ProjectItem : INotifyPropertyChanged
     private List<string> _tags = [];
     private string _lastLaunched = "";
     private int _launchCount;
-    private bool _shelved;
+    private ProjectStatus _status;
+    private string _statusChanged = "";
     private bool? _legacyHidden;
+    private GitRepositoryStatus? _gitStatus;
+    private bool _isExpanded;
 
     [JsonIgnore]
     public int Number
@@ -138,11 +141,38 @@ public sealed class ProjectItem : INotifyPropertyChanged
         }
     }
 
+    [JsonPropertyName("status")]
+    public ProjectStatus Status
+    {
+        get => _status;
+        set
+        {
+            if (SetField(ref _status, value))
+                OnPropertyChanged(nameof(Shelved));
+        }
+    }
+
+    /// <summary>Data ostatniej zmiany kategorii (`yyyy-MM-dd`); chroni recznie przywrocony projekt przed natychmiastowym uspieniem</summary>
+    [JsonPropertyName("statusChanged")]
+    public string StatusChanged
+    {
+        get => _statusChanged;
+        set => SetField(ref _statusChanged, value);
+    }
+
+    // Przestarzale pole dla narzedzi, ktore nie znaja jeszcze `status`: true dla uspionych i archiwalnych.
+    // Przy odczycie starego wpisu bez `status` wartosc true oznacza projekt uspiony.
     [JsonPropertyName("shelved")]
     public bool Shelved
     {
-        get => _shelved;
-        set => SetField(ref _shelved, value);
+        get => Status != ProjectStatus.Active;
+        set
+        {
+            if (!value)
+                Status = ProjectStatus.Active;
+            else if (Status == ProjectStatus.Active)
+                Status = ProjectStatus.Shelved;
+        }
     }
 
     [JsonPropertyName("hidden")]
@@ -151,6 +181,22 @@ public sealed class ProjectItem : INotifyPropertyChanged
     {
         get => _legacyHidden;
         set => _legacyHidden = value;
+    }
+
+    // Rozwiniecie pojedynczej karty jest stanem widoku tylko na czas dzialania launchera.
+    [JsonIgnore]
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set => SetField(ref _isExpanded, value);
+    }
+
+    // Stan Git jest odczytywany przy kazdym pokazaniu listy, wiec nie trafia do rejestru.
+    [JsonIgnore]
+    public GitRepositoryStatus? GitStatus
+    {
+        get => _gitStatus;
+        set => SetField(ref _gitStatus, value);
     }
 
     [JsonIgnore]
