@@ -66,7 +66,7 @@ public class GitStatusReaderTests
 
     [Theory]
     [InlineData(true, GitSyncState.Pushed, GitStateKind.Dirty, "brudne")]
-    [InlineData(false, GitSyncState.Pushed, GitStateKind.Clean, "czyste")]
+    [InlineData(false, GitSyncState.Pushed, GitStateKind.Clean, "wypchnięte")]
     [InlineData(false, GitSyncState.Ahead, GitStateKind.CleanNotPushed, "czyste ↑2")]
     [InlineData(false, GitSyncState.NoRemoteBranch, GitStateKind.CleanNotPushed, "czyste · brak na GitHubie")]
     [InlineData(false, GitSyncState.Unknown, GitStateKind.Pending, "czyste")]

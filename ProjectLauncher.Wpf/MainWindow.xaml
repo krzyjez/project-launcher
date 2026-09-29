@@ -23,6 +23,7 @@
         <local:EmptyTextToVisibilityConverter x:Key="EmptyTextToVisibility" />
         <BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
         <local:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibility" />
+        <local:ProjectStatusNotEqualToVisibilityConverter x:Key="StatusNotEqualToVisibility" />
 
         <SolidColorBrush x:Key="CardBackground" Color="#15161B" />
         <SolidColorBrush x:Key="CardHoverBackground" Color="#1E2028" />
@@ -335,6 +336,50 @@
             </Style.Triggers>
         </Style>
 
+        <!-- Przycisk kategorii projektow pod tagami: ikona i licznik wyrownane do lewej -->
+        <Style x:Key="CategoryToggleButtonStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Foreground" Value="#D8D2C8" />
+            <Setter Property="BorderBrush" Value="#383A43" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Border x:Name="CategoryBorder"
+                                Background="Transparent"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="10,0">
+                            <ContentPresenter HorizontalAlignment="Left"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CategoryBorder" Property="Background" Value="#24262D" />
+                                <Setter Property="Foreground" Value="#FFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CategoryBorder" Property="Background" Value="#24262D" />
+                                <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+                                <Setter Property="Foreground" Value="#FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CategoryIconStyle" TargetType="{x:Type TextBlock}">
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Width" Value="22" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
         <Style x:Key="TagFilterButtonStyle" TargetType="{x:Type Button}">
             <Setter Property="Background" Value="#15161B" />
             <Setter Property="Foreground" Value="{StaticResource TextSubtle}" />
@@ -453,15 +498,39 @@
                            FontSize="11"
                            FontWeight="SemiBold"
                            Margin="1,0,0,8" />
-                <!-- Przelacza glowna liste miedzy aktywnymi a odstawionymi projektami -->
-                <ToggleButton x:Name="ShelvedToggleButton"
-                              DockPanel.Dock="Bottom"
-                              Content="{Binding ShelvedButtonText}"
-                              IsChecked="{Binding ShowShelved, Mode=TwoWay}"
-                              ToolTip="Pokaz odstawione projekty"
-                              Style="{StaticResource HeaderToggleButtonStyle}"
-                              HorizontalAlignment="Stretch"
-                              Margin="0,10,0,0" />
+                <!-- Kategorie projektow: przelaczaja glowna liste; zaznaczenie ustawia kod (_UpdateCategoryButtons) -->
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                    <ToggleButton x:Name="ActiveCategoryButton"
+                                  Tag="Active"
+                                  Click="_CategoryButton_Click"
+                                  ToolTip="Projekty, nad ktorymi pracujesz"
+                                  Style="{StaticResource CategoryToggleButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE945;" Style="{StaticResource CategoryIconStyle}" Foreground="#FFB020" />
+                            <TextBlock Text="{Binding ActiveButtonText}" />
+                        </StackPanel>
+                    </ToggleButton>
+                    <ToggleButton x:Name="ShelvedCategoryButton"
+                                  Tag="Shelved"
+                                  Click="_CategoryButton_Click"
+                                  ToolTip="Projekty uzywane rzadko, do ktorych mozesz wrocic"
+                                  Style="{StaticResource CategoryToggleButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE708;" Style="{StaticResource CategoryIconStyle}" Foreground="#9DB8D5" />
+                            <TextBlock Text="{Binding ShelvedButtonText}" />
+                        </StackPanel>
+                    </ToggleButton>
+                    <ToggleButton x:Name="ClosedCategoryButton"
+                                  Tag="Closed"
+                                  Click="_CategoryButton_Click"
+                                  ToolTip="Projekty zamkniete, zachowane do wgladu"
+                                  Style="{StaticResource CategoryToggleButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE7B8;" Style="{StaticResource CategoryIconStyle}" Foreground="#B8B8C8" />
+                            <TextBlock Text="{Binding ClosedButtonText}" />
+                        </StackPanel>
+                    </ToggleButton>
+                </StackPanel>
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
@@ -550,14 +619,22 @@
 
                         <Border.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="Aktywuj"
-                                          Click="RestoreProjectMenuItem_Click"
-                                          Visibility="{Binding Shelved, Converter={StaticResource BooleanToVisibility}}" />
                                 <MenuItem Header="Edytuj projekt" Click="EditDescriptionMenuItem_Click" />
-                                <MenuItem Header="Odstaw"
-                                          Click="ShelveProjectMenuItem_Click"
-                                          Visibility="{Binding Shelved, Converter={StaticResource InverseBooleanToVisibility}}" />
-                                <MenuItem Header="Usun"
+                                <Separator />
+                                <!-- Przenoszenie miedzy kategoriami; pozycja biezacej kategorii jest ukryta -->
+                                <MenuItem Header="Przenieś do aktualnych"
+                                          Tag="Active"
+                                          Click="_MoveProjectMenuItem_Click"
+                                          Visibility="{Binding Status, Converter={StaticResource StatusNotEqualToVisibility}, ConverterParameter=Active}" />
+                                <MenuItem Header="Przenieś do uśpionych"
+                                          Tag="Shelved"
+                                          Click="_MoveProjectMenuItem_Click"
+                                          Visibility="{Binding Status, Converter={StaticResource StatusNotEqualToVisibility}, ConverterParameter=Shelved}" />
+                                <MenuItem Header="Przenieś do archiwum"
+                                          Tag="Closed"
+                                          Click="_MoveProjectMenuItem_Click"
+                                          Visibility="{Binding Status, Converter={StaticResource StatusNotEqualToVisibility}, ConverterParameter=Closed}" />
+                                <MenuItem Header="Usuń z rejestru"
                                           Click="DeleteProjectMenuItem_Click"
                                           Visibility="{Binding Shelved, Converter={StaticResource BooleanToVisibility}}" />
                             </ContextMenu>
@@ -638,11 +715,12 @@
                                                         <DataTrigger Binding="{Binding GitStatus.StateKind}" Value="Dirty">
                                                             <Setter Property="Foreground" Value="#FF9F1A" />
                                                         </DataTrigger>
+                                                        <!-- Pomaranczowe brudne, zielone czyste ale niewypchniete, niebieskie wypchniete na GitHuba -->
                                                         <DataTrigger Binding="{Binding GitStatus.StateKind}" Value="CleanNotPushed">
-                                                            <Setter Property="Foreground" Value="#F2C900" />
+                                                            <Setter Property="Foreground" Value="#2ECC71" />
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding GitStatus.StateKind}" Value="Clean">
-                                                            <Setter Property="Foreground" Value="#2ECC71" />
+                                                            <Setter Property="Foreground" Value="#4DA3FF" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>

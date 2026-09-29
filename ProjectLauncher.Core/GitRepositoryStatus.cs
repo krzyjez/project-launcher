@@ -92,7 +92,7 @@ public sealed record GitRepositoryStatus
 
             return Sync switch
             {
-                GitSyncState.Pushed => "czyste",
+                GitSyncState.Pushed => "wypchnięte",
                 GitSyncState.Ahead => $"czyste ↑{AheadCount}",
                 GitSyncState.RemoteNewer => "czyste ↓ nowsze na GitHubie",
                 GitSyncState.NoRemoteBranch => "czyste · brak na GitHubie",

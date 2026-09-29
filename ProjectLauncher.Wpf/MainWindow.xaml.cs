@@ -28,7 +28,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _suppressNextClick;
     private string? _screenshotPath;
     private ProjectSortMode _sortMode = ProjectSortMode.LastLaunched;
-    private bool _showShelved;
+    private ProjectStatus _visibleStatus = ProjectStatus.Active;
+    private int _autoSleepAfterDays;
     private bool _closeAllowed;
     private bool _wasHidden;
     private bool _refreshRunning;
@@ -41,28 +42,31 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public ObservableCollection<ProjectItem> ActiveProjects { get; } = [];
     public ObservableCollection<ProjectItem> ShelvedProjects { get; } = [];
+    public ObservableCollection<ProjectItem> ClosedProjects { get; } = [];
     public ObservableCollection<TagFilterItem> TagFilters { get; } = [];
     public string LauncherVersion => typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "1.1.0";
 
-    /// <summary>Glowna lista pokazuje odstawione projekty zamiast aktywnych</summary>
-    public bool ShowShelved
+    /// <summary>Kategoria pokazywana w glownej liscie; domyslnie aktualne projekty</summary>
+    public ProjectStatus VisibleStatus
     {
-        get => _showShelved;
-        set
+        get => _visibleStatus;
+        private set
         {
-            if (_showShelved == value)
+            if (_visibleStatus == value)
                 return;
 
-            _showShelved = value;
+            _visibleStatus = value;
             _OnPropertyChanged();
             _OnPropertyChanged(nameof(VisibleProjects));
         }
     }
 
-    /// <summary>Projekty wyswietlane w glownej liscie: aktywne albo odstawione</summary>
-    public ObservableCollection<ProjectItem> VisibleProjects => ShowShelved ? ShelvedProjects : ActiveProjects;
+    /// <summary>Projekty wyswietlane w glownej liscie: aktualne, uspione albo archiwalne</summary>
+    public ObservableCollection<ProjectItem> VisibleProjects => _ListFor(VisibleStatus);
 
-    public string ShelvedButtonText => $"Odstawione ({ShelvedProjects.Count})";
+    public string ActiveButtonText => $"Aktualne ({ActiveProjects.Count})";
+    public string ShelvedButtonText => $"Uśpione ({ShelvedProjects.Count})";
+    public string ClosedButtonText => $"Archiwum ({ClosedProjects.Count})";
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -99,7 +103,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (_wasHidden)
         {
             _wasHidden = false;
-            ShowShelved = false;
+            VisibleStatus = ProjectStatus.Active;
             _ReloadProjects();
         }
 
@@ -157,7 +161,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void LoadSettings()
     {
-        _sortMode = ProjectRegistry.LoadSettings().SortMode;
+        var settings = ProjectRegistry.LoadSettings();
+        _sortMode = settings.SortMode;
+        _autoSleepAfterDays = settings.AutoSleepAfterDays;
     }
 
     // WPF nie ma juz przelacznika Details; zachowujemy zapisana wartosc, bo uzywa jej wersja Avalonia.
@@ -229,6 +235,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         _registryWriteTime = _GetRegistryWriteTime();
+
+        // Dlugo nieuruchamiane projekty same przechodza do uspionych; zmiana trafia od razu do rejestru.
+        if (ProjectRegistry.ApplyAutoSleep(_projects, _autoSleepAfterDays, DateOnly.FromDateTime(DateTime.Now)) > 0)
+            SaveProjects();
     }
 
     private void SaveProjects()
@@ -242,6 +252,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         ActiveProjects.Clear();
         ShelvedProjects.Clear();
+        ClosedProjects.Clear();
         var number = 1;
 
         foreach (var project in OrderedProjects())
@@ -251,23 +262,46 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 continue;
             }
 
-            if (project.Shelved)
-            {
-                project.Number = 0;
-                ShelvedProjects.Add(project);
-                continue;
-            }
-
-            project.Number = number++;
-            ActiveProjects.Add(project);
+            // Numery 1-9 dostaja tylko aktualne projekty, bo tylko je uruchamia sie z klawiatury.
+            project.Number = project.Status == ProjectStatus.Active ? number++ : 0;
+            _ListFor(project.Status).Add(project);
         }
 
-        // Po przywroceniu ostatniego odstawionego projektu nie ma czego pokazywac w widoku odstawionych.
-        if (ShelvedProjects.Count == 0)
-            ShowShelved = false;
+        // Po przeniesieniu ostatniego projektu z biezacego widoku nie ma czego w nim pokazywac.
+        if (VisibleProjects.Count == 0)
+            VisibleStatus = ProjectStatus.Active;
 
-        ShelvedToggleButton.IsEnabled = ShelvedProjects.Count > 0 || ShowShelved;
+        _UpdateCategoryButtons();
+    }
+
+    private ObservableCollection<ProjectItem> _ListFor(ProjectStatus status)
+    {
+        return status switch
+        {
+            ProjectStatus.Shelved => ShelvedProjects,
+            ProjectStatus.Closed => ClosedProjects,
+            _ => ActiveProjects
+        };
+    }
+
+    // Podswietla przycisk biezacej kategorii i odswieza liczniki na przyciskach.
+    private void _UpdateCategoryButtons()
+    {
+        ActiveCategoryButton.IsChecked = VisibleStatus == ProjectStatus.Active;
+        ShelvedCategoryButton.IsChecked = VisibleStatus == ProjectStatus.Shelved;
+        ClosedCategoryButton.IsChecked = VisibleStatus == ProjectStatus.Closed;
+        _OnPropertyChanged(nameof(ActiveButtonText));
         _OnPropertyChanged(nameof(ShelvedButtonText));
+        _OnPropertyChanged(nameof(ClosedButtonText));
+    }
+
+    // Przelacza glowna liste na kategorie wskazana w Tag przycisku pod tagami.
+    private void _CategoryButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string value } && Enum.TryParse<ProjectStatus>(value, out var status))
+            VisibleStatus = status;
+
+        _UpdateCategoryButtons();
     }
 
     // Odtwarza panel tagow po zmianie danych projektow, zachowujac aktywne filtry.
@@ -367,7 +401,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             // Odstawiony projekt nie jest widoczny w glownej liscie, wiec bez tej podpowiedzi
             // komunikat wyglada jak blad rejestru.
-            var shelvedHint = existingProject.Shelved ? "\n\nProjekt jest wsrod odstawionych." : "";
+            var shelvedHint = existingProject.Status switch
+            {
+                ProjectStatus.Shelved => "\n\nProjekt jest wsrod uspionych.",
+                ProjectStatus.Closed => "\n\nProjekt jest w archiwum.",
+                _ => ""
+            };
             MessageBox.Show(this, $"Ten katalog jest juz w rejestrze:\n{projectPath}{shelvedHint}", "Projekty", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -410,7 +449,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             Tags = [],
             LastLaunched = "",
             LaunchCount = 0,
-            Shelved = false
+            Status = ProjectStatus.Active
         };
     }
 
@@ -508,16 +547,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (e.Key == Key.Escape)
         {
             // Z widoku odstawionych Escape wraca do aktywnych zamiast zamykac launcher.
-            if (ShowShelved)
-                ShowShelved = false;
+            if (VisibleStatus != ProjectStatus.Active)
+            {
+                VisibleStatus = ProjectStatus.Active;
+                _UpdateCategoryButtons();
+            }
             else
+            {
                 Close();
+            }
 
             return;
         }
 
         var number = KeyToNumber(e.Key);
-        if (!ShowShelved && number is not null && number.Value >= 1 && number.Value <= ActiveProjects.Count)
+        if (VisibleStatus == ProjectStatus.Active && number is not null && number.Value >= 1 && number.Value <= ActiveProjects.Count)
         {
             OpenProject(ActiveProjects[number.Value - 1]);
         }
@@ -565,6 +609,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         if (_refreshRunning)
             return;
+
+        // Archiwum nie jest rozwijane, a jego katalogi moga juz nie istniec; nie odpytujemy go.
+        projects = projects.Where(project => project.Status != ProjectStatus.Closed).ToList();
 
         _refreshRunning = true;
         try
@@ -746,16 +793,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SaveProjects();
     }
 
-    private void ShelveProjectMenuItem_Click(object sender, RoutedEventArgs e)
+    // Przenosi projekt do kategorii wskazanej w Tag pozycji menu; data zmiany chroni go przed natychmiastowym uspieniem.
+    private void _MoveProjectMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        if (FindProjectItem(sender) is not { } project)
-        {
+        if (FindProjectItem(sender) is not { } project ||
+            sender is not FrameworkElement { Tag: string value } ||
+            !Enum.TryParse<ProjectStatus>(value, out var status))
             return;
-        }
 
-        project.Shelved = true;
+        project.Status = status;
+        project.StatusChanged = DateTime.Now.ToString("yyyy-MM-dd");
+
+        // Archiwum nie jest odpytywane o stan Git, wiec stary stan nie powinien udawac aktualnego.
+        if (status == ProjectStatus.Closed)
+            project.GitStatus = null;
+
         RebuildProjectLists();
         SaveProjects();
+        _ = _RefreshGitStatusesAsync([project]);
     }
 
     // Otwiera VS Code w katalogu worktree kliknietego na karcie projektu.
@@ -768,26 +823,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             OpenProject(project, worktree.Path);
     }
 
-    private void RestoreProjectMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        RestoreProject(FindProjectItem(sender));
-    }
-
     private void DeleteProjectMenuItem_Click(object sender, RoutedEventArgs e)
     {
         DeleteProject(FindProjectItem(sender));
-    }
-
-    private void RestoreProject(ProjectItem? project)
-    {
-        if (project is null)
-        {
-            return;
-        }
-
-        project.Shelved = false;
-        RebuildProjectLists();
-        SaveProjects();
     }
 
     private void DeleteProject(ProjectItem? project)

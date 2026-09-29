@@ -17,7 +17,9 @@
 ## Domain Rules
 
 - `path` jest głównym identyfikatorem projektu w `launch-projects.json`; porównanie ścieżek jest odporne na wielkość liter i separatory Windows.
-- `shelved` oznacza projekt odstawiony, a nie usunięty.
+- Kategorię projektu zapisuje pole `status` (`active`/`shelved`/`closed`, w UI: Aktualne/Uśpione/Archiwum); brak pola oznacza `active`. Uśpiony i archiwalny projekt nie jest usunięty.
+- `shelved` jest przestarzałe, ale launcher nadal je zapisuje (`true` dla `shelved` i `closed`), bo czytają je wizualizer sesji i `project-audit-report` w `P:\ai`. Nie usuwaj go, dopóki te narzędzia nie przejdą na `status`.
+- Automatyczne usypianie liczy dni od późniejszej z dat `lastLaunched` i `statusChanged`; bez `statusChanged` ręcznie przywrócony stary projekt zasnąłby przy następnym wczytaniu rejestru.
 - `tags` są listą tagów projektu; zaznaczone tagi działają jako filtr OR.
 
 ## Operational Conventions
