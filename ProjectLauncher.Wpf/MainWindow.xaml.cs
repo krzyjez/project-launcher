@@ -100,11 +100,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     /// <summary>Pokazuje okno na wierzchu; po wczesniejszym schowaniu wczytuje rejestr od nowa i odswieza stan Git</summary>
     public void ShowLauncher()
     {
+        // Po autostarcie okno nie bylo jeszcze chowane, ale rejestr mogl sie zmienic od logowania;
+        // nieaktualna lista zapisana przy uruchomieniu projektu skasowalaby zmiany innych narzedzi.
         if (_wasHidden)
         {
             _wasHidden = false;
             VisibleStatus = ProjectStatus.Active;
-            _ReloadProjects();
+            _TryReloadProjects();
+        }
+        else if (_GetRegistryWriteTime() != _registryWriteTime)
+        {
+            _TryReloadProjects();
         }
 
         Show();
@@ -135,6 +141,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         base.OnClosing(e);
+    }
+
+    // Launcher dziala w tle, wiec blad odczytu nie moze go wywrocic: inne narzedzie moze wlasnie zapisywac rejestr.
+    // Zostaje dotychczasowa lista, a kolejna proba nastapi przy nastepnym odswiezeniu albo pokazaniu okna.
+    private void _TryReloadProjects()
+    {
+        try
+        {
+            _ReloadProjects();
+        }
+        catch (Exception exception) when (exception is System.Text.Json.JsonException or IOException)
+        {
+            Debug.WriteLine($"Odswiezenie rejestru: {exception.Message}");
+        }
     }
 
     // Rejestr moglo zmienic inne narzedzie, gdy okno bylo schowane; ostatni znany stan Git zostaje do czasu odswiezenia.
@@ -587,16 +607,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         if (_GetRegistryWriteTime() != _registryWriteTime)
         {
-            try
-            {
-                _ReloadProjects();
-            }
-            catch (Exception exception) when (exception is System.Text.Json.JsonException or IOException)
-            {
-                // Inne narzedzie moze wlasnie zapisywac rejestr; sprobujemy przy nastepnym odswiezeniu.
-                Debug.WriteLine($"Odswiezenie rejestru: {exception.Message}");
-            }
-
+            _TryReloadProjects();
             return;
         }
 

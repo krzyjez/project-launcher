@@ -26,7 +26,7 @@ Plik znajduje sie tutaj:
 
 Do testow i diagnostyki katalog `%USERPROFILE%\ai-tools` moze zostac zastapiony zmienna `AI_TOOLS_HOME`.
 
-Jesli `launch-projects.json` jeszcze nie istnieje, launcher tworzy katalog `%USERPROFILE%\ai-tools`. Rejestr projektow jest jedynym aktywnym zrodlem danych i nie jest nadpisywany automatycznie.
+Jesli `launch-projects.json` jeszcze nie istnieje, launcher tworzy katalog `%USERPROFILE%\ai-tools`. Rejestr projektow jest jedynym aktywnym zrodlem danych i nie jest nadpisywany automatycznie. Jedynym wyjatkiem jest automatyczne usypianie: gdy przy wczytaniu rejestru aktualny projekt przekroczy `autoSleepAfterDays`, launcher zapisuje jego nowy `status` i `statusChanged`.
 
 Format pliku to tablica obiektow JSON. Kazdy obiekt opisuje jeden projekt/repozytorium.
 
