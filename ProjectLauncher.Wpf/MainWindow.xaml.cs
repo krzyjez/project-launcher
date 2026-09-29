@@ -33,6 +33,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private bool _closeAllowed;
     private bool _wasHidden;
     private bool _refreshRunning;
+    private bool _registryLoadFailed;
     private DateTime _lastRemoteRefresh = DateTime.MinValue;
     private DateTime _registryWriteTime;
     private readonly DispatcherTimer _refreshTimer = new() { Interval = RefreshInterval };
@@ -91,6 +92,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         DataContext = this;
         LoadSettings();
         LoadProjects();
+        _ApplyAutoSleep();
         UpdateSortButtons();
         RebuildTagFilters();
         RebuildProjectLists();
@@ -144,16 +146,72 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
 
     // Launcher dziala w tle, wiec blad odczytu nie moze go wywrocic: inne narzedzie moze wlasnie zapisywac rejestr.
-    // Zostaje dotychczasowa lista, a kolejna proba nastapi przy nastepnym odswiezeniu albo pokazaniu okna.
-    private void _TryReloadProjects()
+    // Zostaje dotychczasowa lista, ale zapis jest zablokowany do udanego odczytu (_registryLoadFailed).
+    private bool _TryReloadProjects()
     {
         try
         {
             _ReloadProjects();
+            _registryLoadFailed = false;
+            return true;
         }
-        catch (Exception exception) when (exception is System.Text.Json.JsonException or IOException)
+        catch (Exception exception) when (exception is System.Text.Json.JsonException or IOException or UnauthorizedAccessException)
         {
+            _registryLoadFailed = true;
             Debug.WriteLine($"Odswiezenie rejestru: {exception.Message}");
+            return false;
+        }
+    }
+
+    // Kazda zmiana rejestru przechodzi tedy: jesli plik zmienil sie od ostatniego wczytania (albo odczyt sie nie
+    // udal), najpierw wczytujemy go od nowa i nanosimy zmiane na swieza liste; nieaktualnej listy nigdy nie zapisujemy.
+    // Zmiana dostaje biezaca liste i odnajduje w niej projekt po sciezce, bo obiekty mogly zostac podmienione.
+    private bool _UpdateRegistry(Func<IList<ProjectItem>, bool> change)
+    {
+        if ((_registryLoadFailed || _GetRegistryWriteTime() != _registryWriteTime) && !_TryReloadProjects())
+        {
+            MessageBox.Show(this, "Rejestr projektow jest chwilowo niedostepny albo uszkodzony, wiec zmiana nie zostala zapisana.\n\n" + ProjectLauncherPaths.GetProjectsFilePath(), "Projekty", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+
+        if (!change(_projects))
+            return false;
+
+        try
+        {
+            SaveProjects();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(this, $"Nie udalo sie zapisac rejestru projektow:\n{exception.Message}", "Projekty", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+
+        RebuildTagFilters();
+        RebuildProjectLists();
+        return true;
+    }
+
+    // Aktualny obiekt projektu o tej samej sciezce; po przeladowaniu rejestru karty moga wskazywac stare obiekty.
+    private static ProjectItem? _FindByPath(IList<ProjectItem> projects, ProjectItem project)
+    {
+        return projects.FirstOrDefault(candidate => SameProjectPath(candidate.Path, project.Path));
+    }
+
+    // Dlugo nieuruchamiane projekty same przechodza do uspionych. Nieudany zapis nie psuje odczytu:
+    // zmiana zostaje w pamieci i trafi do pliku przy nastepnej zmianie rejestru.
+    private void _ApplyAutoSleep()
+    {
+        if (ProjectRegistry.ApplyAutoSleep(_projects, _autoSleepAfterDays, DateOnly.FromDateTime(DateTime.Now)) == 0)
+            return;
+
+        try
+        {
+            SaveProjects();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Debug.WriteLine($"Zapis po uspieniu projektow: {exception.Message}");
         }
     }
 
@@ -172,6 +230,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             if (previousStatuses.TryGetValue(project.Path, out var status))
                 project.GitStatus = status;
         }
+
+        _ApplyAutoSleep();
 
         UpdateSortButtons();
         RebuildTagFilters();
@@ -255,10 +315,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
 
         _registryWriteTime = _GetRegistryWriteTime();
-
-        // Dlugo nieuruchamiane projekty same przechodza do uspionych; zmiana trafia od razu do rejestru.
-        if (ProjectRegistry.ApplyAutoSleep(_projects, _autoSleepAfterDays, DateOnly.FromDateTime(DateTime.Now)) > 0)
-            SaveProjects();
     }
 
     private void SaveProjects()
@@ -365,10 +421,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         RebuildProjectLists();
     }
 
-    private void NormalizeProjectOrder()
-    {
-        ProjectRegistry.NormalizeOrder(_projects);
-    }
 
     // Otwiera katalog projektu albo wskazany worktree tego projektu; oba licza sie jako uruchomienie projektu.
     private void OpenProject(ProjectItem project, string? worktreePath = null)
@@ -387,9 +439,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        project.LaunchCount++;
-        project.LastLaunched = DateTime.Now.ToString("yyyy-MM-dd");
-        SaveProjects();
+        // Licznik uruchomien jest informacja poboczna: przy niedostepnym rejestrze edytor i tak sie otwiera.
+        _UpdateRegistry(projects =>
+        {
+            if (_FindByPath(projects, project) is not { } current)
+                return false;
+
+            current.LaunchCount++;
+            current.LastLaunched = DateTime.Now.ToString("yyyy-MM-dd");
+            return true;
+        });
         WorkspaceColorSettings.Apply(targetPath, project.Color);
 
         Process.Start(EditorLauncher.CreateStartInfo(editorPath, targetPath));
@@ -448,12 +507,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         project.Tags = editor.Tags;
         project.Description = editor.DescriptionText;
 
-        _projects.Add(project);
-        NormalizeProjectOrder();
-        RebuildTagFilters();
-        RebuildProjectLists();
-        SaveProjects();
-        _ = _RefreshGitStatusesAsync([project]);
+        // W czasie dialogu inne narzedzie moglo dodac ten sam katalog; wtedy nie dublujemy wpisu.
+        var added = _UpdateRegistry(projects =>
+        {
+            if (_FindByPath(projects, project) is not null)
+                return false;
+
+            projects.Add(project);
+            ProjectRegistry.NormalizeOrder(projects);
+            return true;
+        });
+
+        if (added)
+            _ = _RefreshGitStatusesAsync([project]);
     }
 
     private ProjectItem CreateProjectFromPath(string projectPath)
@@ -788,20 +854,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        var sourceIndex = _projects.IndexOf(source);
-        var targetIndex = _projects.IndexOf(target);
-        if (sourceIndex < 0 || targetIndex < 0)
+        _UpdateRegistry(projects =>
         {
-            return;
-        }
+            if (_FindByPath(projects, source) is not { } currentSource || _FindByPath(projects, target) is not { } currentTarget)
+                return false;
 
-        _projects.RemoveAt(sourceIndex);
-        targetIndex = _projects.IndexOf(target);
-        _projects.Insert(targetIndex, source);
-
-        NormalizeProjectOrder();
-        RebuildProjectLists();
-        SaveProjects();
+            projects.Remove(currentSource);
+            projects.Insert(projects.IndexOf(currentTarget), currentSource);
+            ProjectRegistry.NormalizeOrder(projects);
+            return true;
+        });
     }
 
     // Przenosi projekt do kategorii wskazanej w Tag pozycji menu; data zmiany chroni go przed natychmiastowym uspieniem.
@@ -812,16 +874,25 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             !Enum.TryParse<ProjectStatus>(value, out var status))
             return;
 
-        project.Status = status;
-        project.StatusChanged = DateTime.Now.ToString("yyyy-MM-dd");
+        ProjectItem? moved = null;
+        _UpdateRegistry(projects =>
+        {
+            moved = _FindByPath(projects, project);
+            if (moved is null)
+                return false;
 
-        // Archiwum nie jest odpytywane o stan Git, wiec stary stan nie powinien udawac aktualnego.
-        if (status == ProjectStatus.Closed)
-            project.GitStatus = null;
+            moved.Status = status;
+            moved.StatusChanged = DateTime.Now.ToString("yyyy-MM-dd");
 
-        RebuildProjectLists();
-        SaveProjects();
-        _ = _RefreshGitStatusesAsync([project]);
+            // Archiwum nie jest odpytywane o stan Git, wiec stary stan nie powinien udawac aktualnego.
+            if (status == ProjectStatus.Closed)
+                moved.GitStatus = null;
+
+            return true;
+        });
+
+        if (moved is not null)
+            _ = _RefreshGitStatusesAsync([moved]);
     }
 
     // Otwiera VS Code w katalogu worktree kliknietego na karcie projektu.
@@ -858,10 +929,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        _projects.Remove(project);
-        NormalizeProjectOrder();
-        RebuildProjectLists();
-        SaveProjects();
+        _UpdateRegistry(projects =>
+        {
+            if (_FindByPath(projects, project) is not { } current)
+                return false;
+
+            projects.Remove(current);
+            ProjectRegistry.NormalizeOrder(projects);
+            return true;
+        });
     }
 
     // Wybiera tryb sortowania wskazany przez przycisk w naglowku.
@@ -909,17 +985,22 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             Owner = this
         };
 
-        if (dialog.ShowDialog() == true)
+        if (dialog.ShowDialog() != true)
+            return;
+
+        // W czasie dialogu rejestr mogl zostac przeladowany, wiec zmiany trafiaja do aktualnego obiektu projektu.
+        _UpdateRegistry(projects =>
         {
-            project.Name = dialog.ProjectName;
-            project.Color = dialog.ProjectColor;
-            project.AgentNames = dialog.AgentNames;
-            project.Tags = dialog.Tags;
-            project.Description = dialog.DescriptionText;
-            SaveProjects();
-            RebuildTagFilters();
-            RebuildProjectLists();
-        }
+            if (_FindByPath(projects, project) is not { } current)
+                return false;
+
+            current.Name = dialog.ProjectName;
+            current.Color = dialog.ProjectColor;
+            current.AgentNames = dialog.AgentNames;
+            current.Tags = dialog.Tags;
+            current.Description = dialog.DescriptionText;
+            return true;
+        });
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
